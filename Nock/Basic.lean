@@ -86,7 +86,7 @@ end
 
 mutual
 partial def nock : Noun → Noun → Noun
-  | a, atom _ => panic! "crash: nock atom formula"
+  | _, atom _ => panic! "crash: nock atom formula"
   | a, cell head fol =>
     match head with
     -- *[a [b c] d]        [*[a b c] *[a d]]
@@ -152,16 +152,15 @@ partial def nock : Noun → Noun → Noun
         match fol with
         | cell m n =>
           match m with
-          | atom b =>
+          | atom _ =>
             let c := n
             nock a c
-          | cell b c =>
+          | cell _ c =>
             let d := n
             nock (cell (nock a c) (nock a d)) (cell (atom 0) (atom 3))
           -- | _ => panic! "crash: invalid hint form"
         | _ => panic! "crash: invalid formula for opcode 11"
       | _ => panic! "crash: unknown opcode"
-    -- | _ => panic! "crash: non-atom opcode"
 end
 
 def op (k : Nat) (arg : Noun) : Noun := cell (atom k) arg
