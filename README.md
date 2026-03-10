@@ -1,4 +1,4 @@
-# Nock zkVM — Lean 4 Formal Verification
+# Nock 4K ❖ Lean 4 Formal Verification
 
 Formal verification of a [Nock 4K](https://developers.urbit.org/reference/nock/definition)
 interpreter and Hoon standard-library gates in Lean 4, with the goal of producing a
