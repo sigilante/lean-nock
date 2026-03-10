@@ -1,0 +1,10 @@
+name = "Nock"
+version = "0.1.0"
+defaultTargets = ["Nock"]
+
+[[lean_lib]]
+name = "Nock"
+
+[[lean_exe]]
+name = "main"
+root = "Main"
