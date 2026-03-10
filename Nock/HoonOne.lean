@@ -1,4 +1,5 @@
 import Nock.Basic
+import Nock.Eval
 open Noun
 
 /-!
@@ -93,3 +94,33 @@ section DecEval
 #eval callGate decGate (atom 1)   -- expect: atom 0
 
 end DecEval
+
+/-- Calling gate `[bat [sam ctx]]` with `arg` is equivalent (via NockEval) to
+    running the battery against the sample-replaced core `[bat [arg ctx]]`.
+    This is the formal gate-call lemma: the hypothesis is what you need to
+    prove; the conclusion is what `callGate` does at the formula level. -/
+theorem callGate_gate_eval (bat sam ctx arg r : Noun)
+    (h : NockEval (cell bat (cell arg ctx)) bat r) :
+    NockEval (cell bat (cell sam ctx))
+             (C [atom 9, atom 2,
+                 C [atom 10, C [atom 6, C [atom 1, arg]],
+                    C [atom 0, atom 1]]])
+             r := by
+  simp only [C]
+  -- op9: evaluate [10 [6 [1 arg]] [0 1]] to get the edited core, then run arm 2
+  apply NockEval.op9
+  · -- Step 1: NockEval gate [10 [6 [1 arg]] [0 1]] (cell bat (cell arg ctx))
+    have e1 : NockEval (cell bat (cell sam ctx)) (cell (atom 1) arg) arg :=
+      NockEval.op1
+    have e2 : NockEval (cell bat (cell sam ctx)) (cell (atom 0) (atom 1))
+                       (cell bat (cell sam ctx)) := by
+      have h2 := @NockEval.op0 (cell bat (cell sam ctx)) (atom 1)
+      rw [fas_one] at h2; exact h2
+    have e10 : NockEval (cell bat (cell sam ctx))
+                   (cell (atom 10) (cell (cell (atom 6) (cell (atom 1) arg))
+                                        (cell (atom 0) (atom 1))))
+                   (hax (atom 6) arg (cell bat (cell sam ctx))) :=
+      NockEval.op10 e1 e2
+    rw [hax_six] at e10; exact e10
+  · -- Step 2: NockEval (cell bat (cell arg ctx)) (fas 2 (cell bat (cell arg ctx))) r
+    rw [fas_head]; exact h
