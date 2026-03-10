@@ -43,16 +43,17 @@ def fas : Noun → Noun → Noun
   | atom 3, atom _   => panic! "crash: tail of atom"
   | atom 3, cell _ b => b
   | atom (n + 4), b =>
-    let sub : Noun :=
-      if (n + 4) % 2 = 0 then
-        match b with
-        | atom _ => panic! "crash: head of atom"
-        | cell hd _ => hd
-      else
-        match b with
-        | atom _ => panic! "crash: tail of atom"
-        | cell _ tl => tl
-    fas (atom ((n + 4) / 2)) sub
+    -- /[(2a) b]   = /[2 /[a b]]  recurse first, then take head
+    -- /[(2a+1) b] = /[3 /[a b]]  recurse first, then take tail
+    let sub : Noun := fas (atom ((n + 4) / 2)) b
+    if (n + 4) % 2 = 0 then
+      match sub with
+      | atom _ => panic! "crash: head of atom"
+      | cell hd _ => hd
+    else
+      match sub with
+      | atom _ => panic! "crash: tail of atom"
+      | cell _ tl => tl
     | cell _ _,   _    => panic! "crash: axis cell"
 termination_by
   axis _ =>
@@ -90,7 +91,7 @@ partial def nock : Noun → Noun → Noun
     match head with
     -- *[a [b c] d]        [*[a b c] *[a d]]
     | cell b c =>
-      nock (nock a b) (cell c fol)
+      cell (nock a (cell b c)) (nock a fol)
     -- opcodes
     | atom opcode =>
       match opcode with
