@@ -4,3 +4,4 @@ import Nock.Basic
 import Nock.Proofs
 import Nock.Eval
 import Nock.HoonOne
+import Nock.Notation
