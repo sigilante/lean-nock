@@ -42,7 +42,8 @@ private partial def parseTokens : List String → Option (Noun × List String)
     match collectItems rest [] with
     | none               => none
     | some (items, rest) => (rightAssoc items).map (·, rest)
-  | tok :: rest => tok.toNat?.map (Noun.atom ·, rest)
+  -- Strip Hoon thousands-separator dots (e.g. "1.953.718.630" → 1953718630)
+  | tok :: rest => (tok.replace "." "").toNat?.map (Noun.atom ·, rest)
 
 end
 
