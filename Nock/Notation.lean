@@ -16,6 +16,7 @@ open Noun
 private def tokenizeNock (s : String) : List String :=
   s.foldl (fun acc c =>
     if c == '[' || c == ']' then acc ++ " " ++ c.toString ++ " "
+    else if c.isWhitespace then acc ++ " "   -- normalize \n, \t, etc. to space
     else acc ++ c.toString) ""
   |>.splitOn " " |>.filter (· != "")
 
