@@ -75,3 +75,9 @@ macro "n!" s:str : term => do
   match parseNock src with
   | none      => Lean.Macro.throwError s!"n!: failed to parse Nock notation: '{src}'"
   | some noun => nounToTerm noun
+
+/-- Serialize a `Noun` to standard Nock bracket notation.
+    Useful for generating strings to paste into `n!` literals. -/
+def Noun.toNockStr : Noun → String
+  | atom n   => toString n
+  | cell a b => "[" ++ a.toNockStr ++ " " ++ b.toNockStr ++ "]"
