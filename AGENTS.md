@@ -41,11 +41,15 @@ Recapitulates and extends the Aleo/Leo Nock zkVM project in Lean 4.
 - **`dec_correct`**: full correctness — `NockEval [decBat [n+1 ctx]] decBat (atom n)`.
   Axioms: adds `native_decide` dependencies (`Lean.ofReduceBool`, `Lean.trustCompiler`,
   `Classical.choice`) for structural decomposition of `decBat`.
+- **`add_loop_inv`** / **`add_correct`**: `NockEval [addBat [[m n] ctx]] addBat (atom (m+n))`.
+  Parametric over `AddCtx ctx` — abstracts the dec-calling mechanism (axis 2398 of 8191).
+  Axioms: `propext`, `Classical.choice`, `Quot.sound`.
 
 ## What's not yet proved
 
+- `AddCtx` instance for a concrete verified core (dec wiring).
 - Determinism of `NockEval`.
-- `add`, `mul`, `div`, `lth` correctness (Tier 1 arithmetic).
+- `mul`, `div`, `lth` correctness (Tier 1 arithmetic).
 - Algebraic laws (Tier 2).
 - Fuel-based interpreter `nockF` and soundness/completeness bridge.
 - Circuit correspondence (Tier 3 / zkVM goal).
@@ -54,7 +58,9 @@ Recapitulates and extends the Aleo/Leo Nock zkVM project in Lean 4.
 
 1. ~~dec loop invariant~~ ✓
 2. ~~dec correctness~~ ✓
-3. **add/mul/div/lth** — same loop-invariant pattern as dec.
+3. ~~add loop invariant + correctness~~ ✓ (parametric over `AddCtx`)
+4. **Verified core** — concrete `Noun` with dec at right axis; `AddCtx` instance.
+5. **mul/div/lth** — same pattern; mul will need `AddCtx` + `MulCtx`.
 4. **Determinism** — induction on `NockEval` derivation.
 5. **Fuel interpreter** — `nockF : Nat → Noun → Noun → Option Noun`; bridge theorems.
 6. **Circuit encoding** — R1CS/AIR in Lean; soundness + completeness vs `NockEval`.

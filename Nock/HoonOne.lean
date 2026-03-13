@@ -318,3 +318,112 @@ theorem dec_correct (n : Nat) (ctx : Noun) :
               from by simp [decLoopCore, fas]]
         have h := dec_loop_inv 0 (n + 1) ctx (by omega)
         simp at h; exact h
+
+/-! ## `++add` — unsigned addition
+
+The `++add` gate takes a pair `[a b]` and computes `a + b`.  Its loop body
+decrements `a` while incrementing `b` until `a` reaches zero:
+
+```hoon
+|=  [a=@ b=@]
+?:  =(0 a)  b
+$(a (dec a), b +(b))
+```
+
+The compiled Nock calls `++dec` by axis lookup into the Hoon standard library
+context (axis 2398 of axis 8191).  We abstract over this dependency: the
+`AddCtx` structure asserts that the dec-calling subformula computes correct
+decrements.  This cleanly separates arithmetic correctness from core wiring.
+-/
+
+/-- The battery (loop body) formula for `++add`. -/
+def addBat : Noun :=
+  n! "[6 [5 [1 0] [0 12]] [0 13] [9 2 [10 [6 [[8 [9 2398 [0 8191]] [9 2 [10 [6 [0 28]] [0 2]]]] [4 [0 13]]]] [0 1]]]]"
+
+/-- The add loop core: `[addBat [[a b] ctx]]`. -/
+def addLoopCore (a b : Nat) (ctx : Noun) : Noun :=
+  cell addBat (cell (cell (atom a) (atom b)) ctx)
+
+/-- The dec-calling subformula within add's loop body.
+    Navigates to `++dec` at axis 2398 of axis 8191 in the context,
+    then calls it with the current `a` value. -/
+def addDecCallF : Noun :=
+  n! "[8 [9 2398 [0 8191]] [9 2 [10 [6 [0 28]] [0 2]]]]"
+
+/-- A context supports `++add` if the dec-calling mechanism within the
+    add loop core produces correct decrements for any positive `a`. -/
+structure AddCtx (ctx : Noun) where
+  dec_call : ∀ (a b : Nat), a > 0 →
+    NockEval (addLoopCore a b ctx) addDecCallF (atom (a - 1))
+
+/-- **Add loop invariant.** Running the add battery against the loop core
+    `[addBat [[a b] ctx]]` produces `atom (a + b)`.
+
+    Proved by induction on `a` (which decreases each iteration).
+    The dec-calling mechanism is abstracted via `AddCtx`. -/
+theorem add_loop_inv (a b : Nat) (ctx : Noun) (hctx : AddCtx ctx) :
+    NockEval (addLoopCore a b ctx) addBat (atom (a + b)) := by
+  -- Lift b into the IH by proving ∀ b first
+  suffices h : ∀ b, NockEval (addLoopCore a b ctx) addBat (atom (a + b)) from h b
+  induction a with
+  | zero =>
+    -- a = 0: condition =(0, 0) true, return b
+    intro b; simp
+    change NockEval (addLoopCore 0 b ctx) (cell (atom 6) (cell _ (cell _ _))) (atom b)
+    apply NockEval.op6_then
+    · have : NockEval (addLoopCore 0 b ctx)
+          (cell (atom 5) (cell (cell (atom 1) (atom 0)) (cell (atom 0) (atom 12))))
+          (tis (cell (atom 0) (atom 0))) := by
+        apply NockEval.op5; exact NockEval.op1
+        have h := @NockEval.op0 (addLoopCore 0 b ctx) (atom 12)
+        simp [addLoopCore, fas] at h; exact h
+      simp [tis] at this; exact this
+    · have h := @NockEval.op0 (addLoopCore 0 b ctx) (atom 13)
+      simp [addLoopCore, fas] at h; exact h
+  | succ a ih =>
+    -- a = k+1: condition false, recurse with [k, b+1]
+    intro b
+    change NockEval (addLoopCore (a + 1) b ctx)
+      (cell (atom 6) (cell _ (cell _ _))) (atom (a + 1 + b))
+    apply NockEval.op6_else
+    · have : NockEval (addLoopCore (a+1) b ctx)
+          (cell (atom 5) (cell (cell (atom 1) (atom 0)) (cell (atom 0) (atom 12))))
+          (tis (cell (atom 0) (atom (a+1)))) := by
+        apply NockEval.op5; exact NockEval.op1
+        have h := @NockEval.op0 (addLoopCore (a+1) b ctx) (atom 12)
+        simp [addLoopCore, fas] at h; exact h
+      simp [tis] at this; exact this
+    · -- Edit sample to [dec(a+1), +(b)] = [a, b+1], fire battery
+      apply @NockEval.op9 _ (atom 2) _ (addLoopCore a (1 + b) ctx)
+      · -- op10: build new sample via autocons [dec_call, op4]
+        have slot13 : NockEval (addLoopCore (a+1) b ctx)
+            (cell (atom 0) (atom 13)) (atom b) := by
+          have h := @NockEval.op0 (addLoopCore (a+1) b ctx) (atom 13)
+          simp [addLoopCore, fas] at h; exact h
+        have dec_a : NockEval (addLoopCore (a+1) b ctx) addDecCallF (atom a) := by
+          have h := hctx.dec_call (a + 1) b (by omega); simp at h; exact h
+        have new_sam := NockEval.autocons dec_a (NockEval.op4 slot13)
+        have slot1 : NockEval (addLoopCore (a+1) b ctx)
+            (cell (atom 0) (atom 1)) (addLoopCore (a+1) b ctx) := by
+          have h := @NockEval.op0 (addLoopCore (a+1) b ctx) (atom 1)
+          simp [addLoopCore, fas] at h; exact h
+        have edit := @NockEval.op10 _ (atom 6) _ _
+          (cell (atom a) (atom (1 + b))) (addLoopCore (a+1) b ctx) new_sam slot1
+        have : hax (atom 6) (cell (atom a) (atom (1 + b))) (addLoopCore (a+1) b ctx) =
+            addLoopCore a (1 + b) ctx := by simp [addLoopCore, hax_six]
+        rw [this] at edit; exact edit
+      · -- Fire: fas 2 core = addBat, apply IH
+        rw [show fas (atom 2) (addLoopCore a (1 + b) ctx) = addBat
+              from by simp [addLoopCore, fas]]
+        have := ih (1 + b)
+        rwa [show a + (1 + b) = a + 1 + b from by omega] at this
+
+/-- **Add correctness.** Running the `++add` battery against a gate core
+    `[addBat [[m n] ctx]]` produces `atom (m + n)`, given a context where
+    the dec-calling mechanism works (`AddCtx`).
+
+    Combined with `callGate_gate_eval`, this proves that calling `++add`
+    on any pair of atoms computes the correct sum. -/
+theorem add_correct (m n : Nat) (ctx : Noun) (hctx : AddCtx ctx) :
+    NockEval (cell addBat (cell (cell (atom m) (atom n)) ctx)) addBat (atom (m + n)) :=
+  add_loop_inv m n ctx hctx

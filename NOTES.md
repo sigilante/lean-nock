@@ -135,3 +135,71 @@
 
   Want to push toward dec correctness now, or is the fuel-based refactor a prerequisite you want to
   tackle first?
+
+---
+
+What dec_correct proves
+
+Theorem: For any natural number n and any noun ctx,
+
+NockEval (cell decBat (cell (atom (n + 1)) ctx)) decBat (atom n)
+
+In English: If you take the specific Nock formula decBat (which we pinned via
+native_decide to be exactly the battery compiled from Hoon's ++dec), and run
+it as a Nock program against a subject [decBat [n+1 ctx]] (a standard Hoon
+gate core with sample n+1), then the Nock execution produces the atom n.
+
+What this actually establishes: The compiled Nock code for ++dec, interpreted
+according to the Nock 4K spec (formalized as NockEval), computes mathematical
+decrement. This holds for all natural numbers — not just small test cases.
+
+What it does NOT establish:
+- That the Lean nock evaluator agrees with NockEval (they're independent — one
+is opaque, one is the proof target)
+- Anything about dec 0 (the underflow case — we only prove n + 1 inputs)
+- That a ZK circuit encoding of Nock is correct (that's Tier 3)
+
+What add_correct proves
+
+Theorem: For any m, n, and ctx satisfying AddCtx ctx,
+
+NockEval (cell addBat (cell (cell (atom m) (atom n)) ctx)) addBat (atom (m +
+n))
+
+In English: If you run addBat (the exact compiled Nock for Hoon's ++add)
+against a gate core with sample [m n], and the context ctx provides a working
+++dec at the expected axis, then the result is m + n.
+
+The AddCtx caveat: This is a conditional theorem. It says "add is correct if
+the dec lookup works." We have NOT yet:
+- Built a concrete ctx where dec lives at axis 2398 of axis 8191
+- Proved an AddCtx instance for any specific context
+- Connected dec_correct to add_correct end-to-end
+
+So right now, add_correct is a verified proof that the arithmetic logic of add
+is correct, but the full pipeline (dec is wired up, add calls it, the result
+is right) is not yet closed.
+
+What both proofs share
+
+  - The proof target is NockEval — the inductive relation that is the Nock 4K
+  specification. Each constructor corresponds to one Nock reduction rule. These
+  are not proofs about an evaluator; they are proofs about the language
+  semantics itself.
+  - decBat and addBat are the real compiled Nock, obtained from Hoon's ++dec and
+   ++add via !=. They are pinned as n! literals (kernel-transparent terms). For
+  decBat, native_decide confirms it matches nock (atom 0) decFormula.
+  - No sorry. No custom axioms. The foundation is propext, Quot.sound, and (for
+  some lemmas) Classical.choice from simp's decidable equality reasoning.
+
+  The gap that remains
+
+  The dec and add proofs are not yet composed. To close the loop, we need a
+  concrete noun — a minimal verified Hoon core — where:
+
+  1. dec_correct provides the battery-level guarantee
+  2. That battery lives at a specific axis in the core
+  3. AddCtx is instantiated by showing the axis navigation finds it
+  4. add_correct then applies unconditionally for that core
+
+  That's the "verified core" goal — Phase 2 from our earlier discussion.
