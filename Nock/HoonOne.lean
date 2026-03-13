@@ -147,3 +147,174 @@ theorem callGate_gate_eval (bat sam ctx arg r : Noun)
     rw [hax_six] at e10; exact e10
   · -- Step 2: NockEval (cell bat (cell arg ctx)) (fas 2 (cell bat (cell arg ctx))) r
     rw [fas_head]; exact h
+
+/-! ## `++dec` correctness proof
+
+We prove that the compiled Nock formula for `++dec`, when called with
+argument `n + 1`, produces `atom n` via a valid `NockEval` derivation.
+
+### Proof structure
+
+The dec gate's battery (`decBat`) executes:
+1. **op11 dynamic hint** — discarded (the `~/` jet hint)
+2. **op6 guard** — tests `=(0, sample)`; crashes on zero, continues otherwise
+3. **op8 push b=0** — initializes the loop counter
+4. **op8 push loopBat** — installs the loop body formula
+5. **op9 fire** — enters the loop
+
+The loop core has subject `[loopBat [b [decBat [n ctx]]]]` where:
+- axis 2 = loopBat (loop battery)
+- axis 6 = b (counter, starts at 0)
+- axis 30 = n (original argument, invariant)
+
+Each iteration tests `=(n, +(b))`; if equal, returns `b`; otherwise
+recurses with `b ← b+1` via op10 edit + op9 fire.
+-/
+
+/-- The loop body formula for `++dec`: tests `=(a, +(b))`, returns `b` if
+    equal, otherwise recurses with `b ← +(b)`. -/
+def decLoopBat : Noun :=
+  n! "[6 [5 [0 30] [4 [0 6]]] [0 6] [9 2 [10 [6 [4 [0 6]]] [0 1]]]]"
+
+/-- The loop core for `++dec`: `[loopBat [b [decBat [n ctx]]]]`. -/
+def decLoopCore (b n : Nat) (ctx : Noun) : Noun :=
+  cell decLoopBat (cell (atom b) (cell decBat (cell (atom n) ctx)))
+
+-- Structural decomposition of decBat into hint + guard + loop components.
+-- These are definitional equalities (verified by rfl or native_decide).
+
+private def decBat_hintF : Noun :=
+  n! "[[1 [[1 1717658988] [7 [[0 1] [8 [[1 [1 [100 [101 [99 [114 [101 [109 [101 [110 [116 [45 [117 [110 [100 [101 [114 [102 [108 [111 [119 0]]]]]]]]]]]]]]]]]]]]] [9 [2 [0 1]]]]]]]]] [0 1]]"
+
+private def decBat_guardBody : Noun :=
+  n! "[6 [5 [1 0] [0 6]] [[0 0] [8 [1 0] [8 [1 [6 [5 [0 30] [4 [0 6]]] [0 6] [9 2 [10 [6 [4 [0 6]]] [0 1]]]]] [9 2 [0 1]]]]]]"
+
+private def decBat_pushLoop : Noun :=
+  n! "[8 [1 0] [8 [1 [6 [5 [0 30] [4 [0 6]]] [0 6] [9 2 [10 [6 [4 [0 6]]] [0 1]]]]] [9 2 [0 1]]]]"
+
+private theorem guardBody_parts : decBat_guardBody = cell (atom 6) (cell
+    (cell (atom 5) (cell (cell (atom 1) (atom 0)) (cell (atom 0) (atom 6))))
+    (cell (cell (atom 0) (atom 0)) decBat_pushLoop)) := by native_decide
+
+private theorem pushLoop_parts : decBat_pushLoop = cell (atom 8) (cell (cell (atom 1) (atom 0))
+    (cell (atom 8) (cell (cell (atom 1) decLoopBat)
+      (cell (atom 9) (cell (atom 2) (cell (atom 0) (atom 1))))))) := by native_decide
+
+-- Loop invariant helpers
+
+private theorem dec_cond_eval (b n : Nat) (ctx : Noun) :
+    NockEval (decLoopCore b n ctx)
+      (cell (atom 5) (cell (cell (atom 0) (atom 30)) (cell (atom 4) (cell (atom 0) (atom 6)))))
+      (tis (cell (atom n) (lus (atom b)))) := by
+  apply NockEval.op5
+  · have h := @NockEval.op0 (decLoopCore b n ctx) (atom 30)
+    simp [decLoopCore, fas] at h; exact h
+  · exact NockEval.op4 (by
+      have h := @NockEval.op0 (decLoopCore b n ctx) (atom 6)
+      simp [decLoopCore, fas] at h; exact h)
+
+private theorem dec_slot6_eval (b n : Nat) (ctx : Noun) :
+    NockEval (decLoopCore b n ctx) (cell (atom 0) (atom 6)) (atom b) := by
+  have h := @NockEval.op0 (decLoopCore b n ctx) (atom 6)
+  simp [decLoopCore, fas] at h; exact h
+
+private theorem dec_edit_core (b n : Nat) (ctx : Noun) :
+    NockEval (decLoopCore b n ctx)
+      (cell (atom 10) (cell (cell (atom 6) (cell (atom 4) (cell (atom 0) (atom 6))))
+                            (cell (atom 0) (atom 1))))
+      (decLoopCore (b + 1) n ctx) := by
+  have slot1 : NockEval (decLoopCore b n ctx) (cell (atom 0) (atom 1)) (decLoopCore b n ctx) := by
+    have h := @NockEval.op0 (decLoopCore b n ctx) (atom 1)
+    simp [decLoopCore, fas] at h; exact h
+  have edit := @NockEval.op10 _ (atom 6) _ _ (lus (atom b)) (decLoopCore b n ctx)
+    (NockEval.op4 (dec_slot6_eval b n ctx)) slot1
+  have : hax (atom 6) (lus (atom b)) (decLoopCore b n ctx) = decLoopCore (b + 1) n ctx := by
+    simp [decLoopCore, lus, hax_six, Nat.add_comm]
+  rw [this] at edit; exact edit
+
+private theorem tis_eq_true (b : Nat) :
+    tis (cell (atom (b + 1)) (lus (atom b))) = atom 0 := by
+  simp [lus, tis]; omega
+
+private theorem tis_eq_false (b n : Nat) (h : b + 1 < n) :
+    tis (cell (atom n) (lus (atom b))) = atom 1 := by
+  simp [lus, tis]; omega
+
+/-- **Dec loop invariant.** Running the loop battery against the loop core
+    `[loopBat [b [decBat [n ctx]]]]` where `b < n` produces `atom (n - 1)`.
+
+    Proved by induction on `n - b - 1` (remaining iterations). -/
+theorem dec_loop_inv (b n : Nat) (ctx : Noun) (hb : b < n) :
+    NockEval (decLoopCore b n ctx) decLoopBat (atom (n - 1)) := by
+  obtain ⟨d, hd⟩ : ∃ d, n = b + 1 + d := ⟨n - b - 1, by omega⟩
+  subst hd
+  induction d generalizing b with
+  | zero =>
+    -- Base: n = b + 1, condition =(n, +(b)) is true, return b
+    simp only [Nat.add_zero, show b + 1 - 1 = b from by omega]
+    change NockEval (decLoopCore b (b + 1) ctx)
+      (cell (atom 6) (cell _ (cell _ _))) (atom b)
+    apply NockEval.op6_then
+    · have h := dec_cond_eval b (b + 1) ctx
+      rw [tis_eq_true] at h; exact h
+    · exact dec_slot6_eval b (b + 1) ctx
+  | succ d ih =>
+    -- Step: n = b + 2 + d, condition false, recurse with b+1
+    simp only [show b + 1 + (d + 1) - 1 = b + 1 + d from by omega]
+    change NockEval (decLoopCore b (b + 1 + (d + 1)) ctx)
+      (cell (atom 6) (cell _ (cell _ _))) (atom (b + 1 + d))
+    apply NockEval.op6_else
+    · have h := dec_cond_eval b (b + 1 + (d + 1)) ctx
+      rw [tis_eq_false b (b + 1 + (d + 1)) (by omega)] at h; exact h
+    · -- Else: [9 2 [10 [6 [4 [0 6]]] [0 1]]] — edit b → b+1, fire
+      apply @NockEval.op9 _ (atom 2) _ (decLoopCore (b + 1) (b + 1 + (d + 1)) ctx)
+      · exact dec_edit_core b (b + 1 + (d + 1)) ctx
+      · rw [show fas (atom 2) (decLoopCore (b+1) (b+1+(d+1)) ctx) = decLoopBat
+              from by simp [decLoopCore, fas]]
+        have h1 : b + 1 + (d + 1) = (b + 1) + 1 + d := by omega
+        rw [h1]
+        have := ih (b + 1) (by omega)
+        rwa [show (b + 1) + 1 + d - 1 = b + 1 + d from by omega] at this
+
+/-- **Dec correctness.** Running the `++dec` battery against a gate core
+    `[decBat [n+1 ctx]]` produces `atom n` via a valid `NockEval` derivation.
+
+    Combined with `callGate_gate_eval`, this proves that calling `++dec`
+    on any positive atom computes the correct decrement. -/
+theorem dec_correct (n : Nat) (ctx : Noun) :
+    NockEval (cell decBat (cell (atom (n + 1)) ctx)) decBat (atom n) := by
+  -- Decompose formula via definitional equality (subject stays abstract)
+  show NockEval (cell decBat (cell (atom (n + 1)) ctx))
+    (cell (atom 11) (cell (cell (atom 1851876717) decBat_hintF) decBat_guardBody)) (atom n)
+  -- Step 1: op11_dynamic — discard jet hint
+  apply @NockEval.op11_dynamic _ (atom 1851876717) _ _ _ (atom n)
+  · simp only [decBat_hintF]
+    exact NockEval.autocons NockEval.op1
+      (by have h := @NockEval.op0 (cell decBat (cell (atom (n + 1)) ctx)) (atom 1)
+          rw [fas_one] at h; exact h)
+  · -- Step 2: op6_else — underflow guard (n+1 ≠ 0)
+    rw [guardBody_parts]
+    apply NockEval.op6_else
+    · have h0 : NockEval (cell decBat (cell (atom (n+1)) ctx))
+                  (cell (atom 1) (atom 0)) (atom 0) := NockEval.op1
+      have h6 : NockEval (cell decBat (cell (atom (n+1)) ctx))
+                  (cell (atom 0) (atom 6)) (atom (n + 1)) := by
+        have h := @NockEval.op0 (cell decBat (cell (atom (n+1)) ctx)) (atom 6)
+        simp [fas] at h; exact h
+      have eq := NockEval.op5 h0 h6; simp [tis] at eq; exact eq
+    · -- Steps 3-5: push b=0, push loopBat, fire loop
+      rw [pushLoop_parts]
+      apply NockEval.op8 NockEval.op1  -- push b=0
+      apply NockEval.op8 NockEval.op1  -- push loopBat (quoted by [1 loopBat])
+      -- Subject is now decLoopCore 0 (n+1) ctx (definitionally)
+      show NockEval (decLoopCore 0 (n + 1) ctx)
+        (cell (atom 9) (cell (atom 2) (cell (atom 0) (atom 1)))) (atom n)
+      apply @NockEval.op9 _ (atom 2) _ (decLoopCore 0 (n + 1) ctx)
+      · -- [0 1] → loop core
+        have h := @NockEval.op0 (decLoopCore 0 (n + 1) ctx) (atom 1)
+        rw [fas_one] at h; exact h
+      · -- fas 2 core = decLoopBat; apply loop invariant
+        rw [show fas (atom 2) (decLoopCore 0 (n + 1) ctx) = decLoopBat
+              from by simp [decLoopCore, fas]]
+        have h := dec_loop_inv 0 (n + 1) ctx (by omega)
+        simp at h; exact h
