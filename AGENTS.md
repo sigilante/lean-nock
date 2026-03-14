@@ -61,15 +61,48 @@ Recapitulates and extends the Aleo/Leo Nock zkVM project in Lean 4.
 
 ## Proof roadmap
 
+### Tier 1 — Arithmetic correctness
 1. ~~dec loop invariant~~ ✓
 2. ~~dec correctness~~ ✓
 3. ~~add loop invariant + correctness~~ ✓ (parametric over `AddCtx`)
 4. ~~sub loop invariant + correctness~~ ✓ (parametric over `SubCtx`, crash as absence)
 5. **Verified core** — concrete `Noun` with dec at right axis; `AddCtx`/`SubCtx` instances.
 6. **mul/div/lth** — same pattern; mul will need `AddCtx` + `MulCtx`.
-7. **Determinism** — induction on `NockEval` derivation.
-8. **Fuel interpreter** — `nockF : Nat → Noun → Noun → Option Noun`; bridge theorems.
-9. **Circuit encoding** — R1CS/AIR in Lean; soundness + completeness vs `NockEval`.
+
+### Tier 2 — Semantic infrastructure
+7. **Determinism** — `NockEval s f r₁ → NockEval s f r₂ → r₁ = r₂`, by induction on derivation.
+8. **Fuel interpreter** — `nockF : Nat → Noun → Noun → Option Noun`, total transparent `def`.
+   Soundness: `nockF fuel s f = some r → NockEval s f r`.
+   Completeness: `NockEval s f r → ∃ fuel, nockF fuel s f = some r`.
+9. **Algebraic laws** — commutativity of add, distributivity, cancellation `sub (add n k) n = k`.
+
+### Tier 3 — zkVM circuit (6 phases)
+Architecture follows Kattis et al. 2025 (`/refs/2025-1110.pdf`): two RAP tables
+(compute + memory) linked by LogUp IO consistency, over Goldilocks field.
+
+10. **Phase 1: Finite field infra** — `ZMod p`, Goldilocks field, degree-3 extension,
+    polynomial evaluation, Schwartz-Zippel lemma.
+11. **Phase 2: Noun Polynomial Representation** — NPR encoding of `Noun` as polynomial
+    tuples `(size, data_poly, dyck_poly)`. Fingerprinting, collision bounds, recursive
+    decomposition via `cons` (3 algebraic checks per node). Atom size bound `< p`.
+12. **Phase 3: RAP formalization** — `structure RAP` with trace, transition constraints,
+    satisfiability. Multiset equality (LogUp). One-hot opcode encoding.
+13. **Phase 4: NockVM circuit** — `RAPNockComp` (compute table, one opcode per row,
+    57e+13 columns, 20e+13 degree-4 gates) and `RAPNockMem` (memory table, noun validity
+    + axis verification, 54e+5 columns). IO matching via LogUp accumulators.
+14. **Phase 5: Soundness + completeness** — Crown theorems:
+    `circuit_sound`: RAP satisfied → `NockEval` holds.
+    `circuit_complete`: `NockEval` derivation (bounded size) → satisfying RAP trace.
+15. **Phase 6: Witness generation** (optional) — executable Lean code producing
+    concrete field-element traces from `NockEval` derivations, exportable to prover backends.
+
+### Key zkVM limitations (details in README.md)
+- **Atom size bound**: atoms must fit in F_p (64 bits for Goldilocks); multi-limb for larger.
+- **Fixed trace length**: RAP rows fixed a priori; recursive composition not formalized.
+- **OP10 gap**: reference paper excludes `#` (tree edit); our proofs use it heavily (hax_six).
+  Must either inline OP10 as read+cons or extend memory table to RAM.
+- **Hints are no-ops**: jet-accelerated crypto (SHA-256 etc.) requires full Nock expansion.
+- **Lean verifies circuit design, does not produce executable ZK proofs.**
 
 ## Key technical notes
 
