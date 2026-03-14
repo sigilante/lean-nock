@@ -427,3 +427,134 @@ theorem add_loop_inv (a b : Nat) (ctx : Noun) (hctx : AddCtx ctx) :
 theorem add_correct (m n : Nat) (ctx : Noun) (hctx : AddCtx ctx) :
     NockEval (cell addBat (cell (cell (atom m) (atom n)) ctx)) addBat (atom (m + n)) :=
   add_loop_inv m n ctx hctx
+
+/-! ## `++sub` — unsigned subtraction
+
+The `++sub` gate takes a pair `[a b]` and computes `a - b`.  Its loop body
+decrements both `a` and `b` until `b` reaches zero:
+
+```hoon
+~/  %sub
+|=  [a=@ b=@]
+~_  leaf+"subtract-underflow"
+?:  =(0 b)  a
+$(a (dec a), b (dec b))
+```
+
+Like `++add`, the compiled Nock calls `++dec` by axis lookup.  We abstract
+via `SubCtx`.  The battery wraps the entire loop body in a `~_` hint
+(op11_dynamic) which fires on every iteration.
+
+When `b > a`, the gate crashes (attempts `dec 0`).  We model this by
+restricting the theorem to `b ≤ a`: no `NockEval` derivation exists for
+the crash case.
+-/
+
+/-- Dec-calling subformula for `a` (axis 28) within sub's loop. -/
+def subDecCallA : Noun :=
+  n! "[8 [9 2398 [0 8191]] [9 2 [10 [6 [0 28]] [0 2]]]]"
+
+/-- Dec-calling subformula for `b` (axis 29) within sub's loop. -/
+def subDecCallB : Noun :=
+  n! "[8 [9 2398 [0 8191]] [9 2 [10 [6 [0 29]] [0 2]]]]"
+
+/-- The inner loop formula for `++sub` (condition + body, without hint wrapper). -/
+def subInnerBat : Noun :=
+  n! "[6 [5 [1 0] [0 13]] [0 12] [9 2 [10 [6 [[8 [9 2398 [0 8191]] [9 2 [10 [6 [0 28]] [0 2]]]] [8 [9 2398 [0 8191]] [9 2 [10 [6 [0 29]] [0 2]]]]]] [0 1]]]]"
+
+/-- The hint clue formula for `~_ leaf+"subtract-underflow"`. -/
+private def subHintClueF : Noun :=
+  n! "[[1 [1 1717658988] 7 [0 1] 8 [1 1 115 117 98 116 114 97 99 116 45 117 110 100 101 114 102 108 111 119 0] 9 2 0 1] [0 1]]"
+
+/-- The battery for `++sub`: hint-wrapped loop body.
+    Defined structurally so that op11_dynamic decomposition is definitional. -/
+def subBat : Noun :=
+  cell (atom 11) (cell (cell (atom 1851876717) subHintClueF) subInnerBat)
+
+/-- The sub loop core: `[subBat [[a b] ctx]]`. -/
+def subLoopCore (a b : Nat) (ctx : Noun) : Noun :=
+  cell subBat (cell (cell (atom a) (atom b)) ctx)
+
+/-- A context supports `++sub` if the dec-calling mechanism produces
+    correct decrements for both arguments. -/
+structure SubCtx (ctx : Noun) where
+  dec_call_a : ∀ (a b : Nat), a > 0 →
+    NockEval (subLoopCore a b ctx) subDecCallA (atom (a - 1))
+  dec_call_b : ∀ (a b : Nat), b > 0 →
+    NockEval (subLoopCore a b ctx) subDecCallB (atom (b - 1))
+
+/-- **Sub loop invariant / correctness.** Running the `++sub` battery against
+    `[subBat [[a b] ctx]]` where `b ≤ a` produces `atom (a - b)`.
+
+    The loop decrements both `a` and `b` until `b` reaches 0, then returns `a`.
+    A `~_` hint fires every iteration (stripped by op11_dynamic).
+
+    Proved by induction on `b`.  The dec-calling mechanism is abstracted
+    via `SubCtx`. -/
+theorem sub_loop_inv (a b : Nat) (ctx : Noun) (hctx : SubCtx ctx) (hab : b ≤ a) :
+    NockEval (subLoopCore a b ctx) subBat (atom (a - b)) := by
+  revert a
+  induction b with
+  | zero =>
+    intro a _; simp only [Nat.sub_zero]
+    -- subBat = [11 [tag hintClue] subInnerBat] — strip hint via op11_dynamic
+    apply NockEval.op11_dynamic
+    · exact NockEval.autocons NockEval.op1
+        (by have h := @NockEval.op0 (subLoopCore a 0 ctx) (atom 1); rw [fas_one] at h; exact h)
+    · -- subInnerBat = [6 cond then else]; b=0 so condition is true
+      change NockEval (subLoopCore a 0 ctx) (cell (atom 6) (cell _ (cell _ _))) (atom a)
+      apply NockEval.op6_then
+      · have : NockEval (subLoopCore a 0 ctx)
+            (cell (atom 5) (cell (cell (atom 1) (atom 0)) (cell (atom 0) (atom 13))))
+            (tis (cell (atom 0) (atom 0))) := by
+          apply NockEval.op5; exact NockEval.op1
+          have h := @NockEval.op0 (subLoopCore a 0 ctx) (atom 13)
+          simp [subLoopCore, fas] at h; exact h
+        simp [tis] at this; exact this
+      · have h := @NockEval.op0 (subLoopCore a 0 ctx) (atom 12)
+        simp [subLoopCore, fas] at h; exact h
+  | succ b ih =>
+    intro a hab
+    -- Strip hint
+    apply NockEval.op11_dynamic
+    · exact NockEval.autocons NockEval.op1
+        (by have h := @NockEval.op0 (subLoopCore a (b + 1) ctx) (atom 1)
+            rw [fas_one] at h; exact h)
+    · -- b+1 ≠ 0: condition false
+      change NockEval (subLoopCore a (b + 1) ctx)
+        (cell (atom 6) (cell _ (cell _ _))) (atom (a - (b + 1)))
+      apply NockEval.op6_else
+      · have : NockEval (subLoopCore a (b + 1) ctx)
+            (cell (atom 5) (cell (cell (atom 1) (atom 0)) (cell (atom 0) (atom 13))))
+            (tis (cell (atom 0) (atom (b + 1)))) := by
+          apply NockEval.op5; exact NockEval.op1
+          have h := @NockEval.op0 (subLoopCore a (b + 1) ctx) (atom 13)
+          simp [subLoopCore, fas] at h; exact h
+        simp [tis] at this; exact this
+      · -- Recurse: [9 2 [10 [6 [DEC_A DEC_B]] [0 1]]]
+        apply @NockEval.op9 _ (atom 2) _ (subLoopCore (a - 1) b ctx)
+        · -- op10: edit sample [a, b+1] → [a-1, b]
+          have dec_a := hctx.dec_call_a a (b + 1) (by omega)
+          have dec_b := hctx.dec_call_b a (b + 1) (by omega)
+          rw [show (b + 1) - 1 = b from by omega] at dec_b
+          have new_sam := NockEval.autocons dec_a dec_b
+          have slot1 : NockEval (subLoopCore a (b + 1) ctx)
+              (cell (atom 0) (atom 1)) (subLoopCore a (b + 1) ctx) := by
+            have h := @NockEval.op0 (subLoopCore a (b + 1) ctx) (atom 1)
+            rw [fas_one] at h; exact h
+          have edit := @NockEval.op10 _ (atom 6) _ _
+            (cell (atom (a - 1)) (atom b)) (subLoopCore a (b + 1) ctx) new_sam slot1
+          have : hax (atom 6) (cell (atom (a - 1)) (atom b)) (subLoopCore a (b + 1) ctx) =
+              subLoopCore (a - 1) b ctx := by simp [subLoopCore, hax_six]
+          rw [this] at edit; exact edit
+        · -- Fire: fas 2 core = subBat, apply IH
+          rw [show fas (atom 2) (subLoopCore (a - 1) b ctx) = subBat
+                from by simp [subLoopCore, fas]]
+          have := ih (a - 1) (by omega)
+          rwa [show (a - 1) - b = a - (b + 1) from by omega] at this
+
+/-- **Sub correctness.** Running `++sub` on `[a b]` with `b ≤ a` produces `a - b`.
+    The dec-calling mechanism is abstracted via `SubCtx`. -/
+theorem sub_correct (a b : Nat) (ctx : Noun) (hctx : SubCtx ctx) (hab : b ≤ a) :
+    NockEval (cell subBat (cell (cell (atom a) (atom b)) ctx)) subBat (atom (a - b)) :=
+  sub_loop_inv a b ctx hctx hab

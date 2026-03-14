@@ -1,6 +1,6 @@
 # AGENTS.md — Project Context for AI Assistants
 
-Updated after dec correctness proof (post-`75b81f7`, 2026-03-13).
+Updated after sub correctness proof (post-`75b81f7`, 2026-03-13).
 
 ---
 
@@ -25,7 +25,7 @@ Recapitulates and extends the Aleo/Leo Nock zkVM project in Lean 4.
 | `Nock/Basic.lean` | `Noun` type; `wut`, `lus`, `tis`, `fas`, `hax`; `partial def nock` |
 | `Nock/Proofs.lean` | 17 lemmas for `fas` and `hax` (base, recursion, corollaries) |
 | `Nock/Eval.lean` | `NockEval` inductive relation + sanity examples |
-| `Nock/HoonOne.lean` | `decFormula`, `decGate`, `callGate_gate_eval`, `dec_loop_inv`, `dec_correct` |
+| `Nock/HoonOne.lean` | `decFormula`, `decGate`, `callGate_gate_eval`, `dec/add/sub` loop invariants + correctness |
 | `Nock/Notation.lean` | `n!` macro: compile-time Nock bracket notation parser |
 | `Main.lean` | `#eval` smoke tests |
 
@@ -44,10 +44,15 @@ Recapitulates and extends the Aleo/Leo Nock zkVM project in Lean 4.
 - **`add_loop_inv`** / **`add_correct`**: `NockEval [addBat [[m n] ctx]] addBat (atom (m+n))`.
   Parametric over `AddCtx ctx` — abstracts the dec-calling mechanism (axis 2398 of 8191).
   Axioms: `propext`, `Classical.choice`, `Quot.sound`.
+- **`sub_loop_inv`** / **`sub_correct`**: `NockEval [subBat [[a b] ctx]] subBat (atom (a-b))` for `b ≤ a`.
+  Parametric over `SubCtx ctx` — abstracts two dec calls (axes 28 and 29).
+  Battery includes `~_` hint (op11_dynamic) on every iteration.
+  Crash for `b > a` modeled as absence of `NockEval` derivation.
+  Axioms: `propext`, `Classical.choice`, `Quot.sound`.
 
 ## What's not yet proved
 
-- `AddCtx` instance for a concrete verified core (dec wiring).
+- `AddCtx`/`SubCtx` instances for a concrete verified core (dec wiring).
 - Determinism of `NockEval`.
 - `mul`, `div`, `lth` correctness (Tier 1 arithmetic).
 - Algebraic laws (Tier 2).
@@ -59,11 +64,12 @@ Recapitulates and extends the Aleo/Leo Nock zkVM project in Lean 4.
 1. ~~dec loop invariant~~ ✓
 2. ~~dec correctness~~ ✓
 3. ~~add loop invariant + correctness~~ ✓ (parametric over `AddCtx`)
-4. **Verified core** — concrete `Noun` with dec at right axis; `AddCtx` instance.
-5. **mul/div/lth** — same pattern; mul will need `AddCtx` + `MulCtx`.
-4. **Determinism** — induction on `NockEval` derivation.
-5. **Fuel interpreter** — `nockF : Nat → Noun → Noun → Option Noun`; bridge theorems.
-6. **Circuit encoding** — R1CS/AIR in Lean; soundness + completeness vs `NockEval`.
+4. ~~sub loop invariant + correctness~~ ✓ (parametric over `SubCtx`, crash as absence)
+5. **Verified core** — concrete `Noun` with dec at right axis; `AddCtx`/`SubCtx` instances.
+6. **mul/div/lth** — same pattern; mul will need `AddCtx` + `MulCtx`.
+7. **Determinism** — induction on `NockEval` derivation.
+8. **Fuel interpreter** — `nockF : Nat → Noun → Noun → Option Noun`; bridge theorems.
+9. **Circuit encoding** — R1CS/AIR in Lean; soundness + completeness vs `NockEval`.
 
 ## Key technical notes
 
