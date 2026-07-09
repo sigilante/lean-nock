@@ -2,6 +2,7 @@ import Nock.Basic
 import Nock.Proofs
 import Nock.Eval
 import Nock.Fuel
+import Nock.Notation
 open Noun
 
 /-!
@@ -22,6 +23,27 @@ file does **not** claim verified C, a verified compiler to C, or verified jets.
 The accurate claim is: *the composition schema is kernel-checked; the C
 routines are modeled, not compiled.*
 
+`cw .dec` will look like a jet.  It is not.  **`cw` is the contract interface:
+the shared denotation that both the Nock formula and the C routine are
+separately obligated to meet.**  The leaf theorem discharges the Nock side's
+obligation, kernel-checked.  The C side's obligation to the same denotation is
+the trusted base, on paper, exactly where the manuscript says it lives.  `cw`
+is not an implementation of anything; it is Equation 1's meeting point made
+into a Lean term.
+
+## Crash-totality is enforced, not assumed
+
+`leaf_correct` supplies a derivation at *every* subject, so no `phi w` can
+diverge (`word_crash_total`).  A formula that diverges anywhere is therefore
+not denotable as a `Word` (`not_denotable_of_diverges`).  This is the paper's
+guard-emission rule — Λ emits domain guards ahead of every partial operation —
+surfacing as a type-level invariant.  Divergence enters the language
+exclusively through `while`.
+
+The rule is non-vacuous: `Nock/Shim.lean` exhibits the excluded witness.
+Hoon's compiled `++dec`, naively lifted, diverges on a cell argument and so is
+provably not a `Word`.
+
 ## Stack convention
 
 The subject is the stack, `S = [top rest]`.  In an effect comment `( a b — … )`
@@ -38,7 +60,47 @@ definitionally only in this order.
 inductive Word
   | dup | drop | swap | over | cons | head | tail   -- Class A
   | inc | eq | celq                                 -- Class B  (celq = cel?)
+  | dec                                             -- Class C
   deriving DecidableEq, Repr
+
+-- ---------------------------------------------------------------------------
+-- Class C: guarded `dec`
+--
+-- `countUp` is the manuscript's canonical loop, verbatim.  Its core is
+-- `[bat [b a]]`: axis 2 = battery, 6 = counter, 7 = argument.  It is built for
+-- a BARE ATOM argument and diverges on a cell.
+--
+-- The guards are the manuscript's, corrected: they sit at axis 1, not axis 2.
+-- As printed (axis 2) they read the wrong noun under the lift — see
+-- TABLE-REPORT.md §C.  The `dec` row of Table C is discharged by `leaf_dec`.
+-- ---------------------------------------------------------------------------
+
+def countUp : Noun :=
+  n! "[8 [1 0] 8 [1 6 [5 [0 7] 4 0 6] [0 6] [9 2 [0 2] [4 0 6] 0 7]] 9 2 0 1]"
+
+/-- The loop battery of `countUp`. -/
+def countUpBat : Noun :=
+  n! "[6 [5 [0 7] 4 0 6] [0 6] [9 2 [0 2] [4 0 6] 0 7]]"
+
+/-- The loop core: `[countUpBat [b a]]`. -/
+def countUpCore (b : Nat) (a : Noun) : Noun :=
+  cell countUpBat (cell (atom b) a)
+
+/-- Λ-emitted domain guards, at axis 1 (the argument guarded-dec receives).
+
+      [6 [3 0 1] [0 0] [6 [5 [1 0] 0 1] [0 0] <count-up>]] -/
+def decGuarded : Noun :=
+  cell (atom 6) (cell (n! "[3 0 1]")
+    (cell (n! "[0 0]")
+      (cell (atom 6) (cell (n! "[5 [1 0] 0 1]") (cell (n! "[0 0]") countUp)))))
+
+/-- Lift a unary atom operation to a stack word: run `g` on the top, cons the
+    result back onto the rest.  The manuscript's lift, unchanged.
+
+    The depth guard is free: on a bare-atom stack `fasO (atom 2) (atom _) = none`,
+    so `op7`'s left operand crashes. -/
+def liftUnary (g : Noun) : Noun :=
+  cell (cell (atom 7) (cell (cell (atom 0) (atom 2)) g)) (cell (atom 0) (atom 3))
 
 /-- Nock formulas, transcribed verbatim from the paper's Tables A and B. -/
 def phi : Word → Noun
@@ -68,6 +130,8 @@ def phi : Word → Noun
   | .celq => cell (cell (atom 3) (cell (atom 0) (atom 2)))
                   (cell (atom 0) (atom 3))
       -- [[3 0 2] 0 3]        ( a — ? )
+  | .dec  => liftUnary decGuarded
+      -- [[7 [0 2] <guarded-dec>] 0 3]   ( a — a-1 )
 
 /-- The shallow C model.  Total over **all** nouns; the `.exit` cases are the
     ⊥-domain column of the paper's tables, stated over arbitrary nouns rather
@@ -100,6 +164,11 @@ def cw : Word → Noun → Outcome
   | .eq,   atom _            => .exit
   | .celq, cell a r          => .val (cell (wut a) r)
   | .celq, atom _            => .exit
+  -- Table C row for `dec`.  NORMATIVE — transcribed, not fitted to a proof.
+  | .dec,  atom _              => .exit                    -- depth < 1
+  | .dec,  cell (atom 0) _     => .exit                    -- underflow
+  | .dec,  cell (cell _ _) _   => .exit                    -- cell argument
+  | .dec,  cell (atom (n+1)) r => .val (cell (atom n) r)
 
 -- ---------------------------------------------------------------------------
 -- Leaf contracts: one per word.  Each is a *single* statement carrying the
@@ -211,6 +280,145 @@ private theorem leaf_celq (S : Noun) : NockEval S (phi .celq) (cw .celq S) := by
     exact NockEval.autocons (NockEval.op3 (NockEval.op0 (fasO_head a r)))
                             (NockEval.op0 (fasO_tail a r))
 
+-- ── Class C: the guarded `dec` leaf ────────────────────────────────────────
+
+private def cuCond : Noun := n! "[5 [0 7] 4 0 6]"
+private def cuThen : Noun := n! "[0 6]"
+private def cuRebuild : Noun := n! "[[0 2] [4 0 6] 0 7]"
+private def cuElse : Noun := cell (atom 9) (cell (atom 2) cuRebuild)
+
+private theorem countUpBat_parts :
+    countUpBat = cell (atom 6) (cell cuCond (cell cuThen cuElse)) := rfl
+
+private theorem countUp_parts :
+    countUp = cell (atom 8) (cell (cell (atom 1) (atom 0))
+      (cell (atom 8) (cell (cell (atom 1) countUpBat)
+        (cell (atom 9) (cell (atom 2) (cell (atom 0) (atom 1))))))) := rfl
+
+private theorem cu_slot6 (b : Nat) (a : Noun) :
+    NockEval (countUpCore b a) cuThen (.val (atom b)) :=
+  NockEval.op0 (fasO_six countUpBat (atom b) a)
+
+private theorem cu_slot7 (b : Nat) (a : Noun) :
+    NockEval (countUpCore b a) (cell (atom 0) (atom 7)) (.val a) :=
+  NockEval.op0 (fasO_seven countUpBat (atom b) a)
+
+private theorem cu_cond (b : Nat) (a : Noun) :
+    NockEval (countUpCore b a) cuCond (.val (tisN a (atom (1 + b)))) :=
+  NockEval.op5 (cu_slot7 b a) (NockEval.op4 (cu_slot6 b a) (lusO_atom b))
+
+/-- The recursion rebuilds the core by autocons — no `haxO` edit. -/
+private theorem cu_rebuild (b : Nat) (a : Noun) :
+    NockEval (countUpCore b a) cuRebuild (.val (countUpCore (b + 1) a)) := by
+  have h : NockEval (countUpCore b a) cuRebuild
+      (.val (cell countUpBat (cell (atom (1 + b)) a))) :=
+    NockEval.autocons (NockEval.op0 (fasO_head _ _))
+      (NockEval.autocons (NockEval.op4 (cu_slot6 b a) (lusO_atom b)) (cu_slot7 b a))
+  simpa [countUpCore, Nat.add_comm] using h
+
+private theorem tisN_cu_true (b : Nat) : tisN (atom (b + 1)) (atom (1 + b)) = atom 0 := by
+  simp [tisN, Nat.add_comm]
+
+private theorem tisN_cu_false (b n : Nat) (h : b + 1 < n) :
+    tisN (atom n) (atom (1 + b)) = atom 1 := by
+  refine tisN_neq _ _ ?_
+  intro hc; simp at hc; omega
+
+/-- Loop invariant for the manuscript's canonical `<count-up>`. -/
+private theorem countUp_loop (b n : Nat) (hb : b < n) :
+    NockEval (countUpCore b (atom n)) countUpBat (.val (atom (n - 1))) := by
+  obtain ⟨d, hd⟩ : ∃ d, n = b + 1 + d := ⟨n - b - 1, by omega⟩
+  subst hd
+  induction d generalizing b with
+  | zero =>
+    simp only [Nat.add_zero, show b + 1 - 1 = b from by omega]
+    rw [countUpBat_parts]
+    refine NockEval.op6_then ?_ (cu_slot6 b (atom (b + 1)))
+    have h := cu_cond b (atom (b + 1))
+    rwa [tisN_cu_true] at h
+  | succ d ih =>
+    simp only [show b + 1 + (d + 1) - 1 = b + 1 + d from by omega]
+    rw [countUpBat_parts]
+    refine NockEval.op6_else ?_ ?_
+    · have h := cu_cond b (atom (b + 1 + (d + 1)))
+      rwa [tisN_cu_false b (b + 1 + (d + 1)) (by omega)] at h
+    · show NockEval (countUpCore b (atom (b + 1 + (d + 1)))) cuElse (.val (atom (b + 1 + d)))
+      refine NockEval.op9 (cu_rebuild b _) (fasO_head _ _) ?_
+      rw [show b + 1 + (d + 1) = (b + 1) + 1 + d from by omega]
+      have := ih (b + 1) (by omega)
+      rwa [show (b + 1) + 1 + d - 1 = b + 1 + d from by omega] at this
+
+/-- `<count-up>` is correct — on a **bare atom**.  (On a stack subject it
+    diverges; that is the Reading-B refutation in TABLE-REPORT.md §C.3.) -/
+private theorem countUp_correct (n : Nat) :
+    NockEval (atom (n + 1)) countUp (.val (atom n)) := by
+  rw [countUp_parts]
+  refine NockEval.op8 NockEval.op1 ?_
+  refine NockEval.op8 NockEval.op1 ?_
+  show NockEval (countUpCore 0 (atom (n + 1)))
+    (cell (atom 9) (cell (atom 2) (cell (atom 0) (atom 1)))) (.val (atom n))
+  refine NockEval.op9 (core := countUpCore 0 (atom (n + 1))) (arm := countUpBat)
+    (NockEval.op0 (fasO_one _)) (fasO_head _ _) ?_
+  have h := countUp_loop 0 (n + 1) (by omega)
+  simpa using h
+
+/-- Guard 1 fires: a cell argument crashes.  With the guards at axis 1 this
+    reads the argument itself; the printed axis 2 read its *head*. -/
+private theorem decg_cell (x y : Noun) : NockEval (cell x y) decGuarded .exit := by
+  refine NockEval.op6_then ?_ (NockEval.op0_crash (fasO_zero _))
+  have h : NockEval (cell x y) (cell (atom 3) (cell (atom 0) (atom 1)))
+      (.val (wut (cell x y))) := NockEval.op3 (NockEval.op0 (fasO_one _))
+  rwa [wut_cell] at h
+
+/-- Guard 2 fires: underflow crashes. -/
+private theorem decg_zero : NockEval (atom 0) decGuarded .exit := by
+  refine NockEval.op6_else ?_ ?_
+  · have h : NockEval (atom 0) (cell (atom 3) (cell (atom 0) (atom 1)))
+        (.val (wut (atom 0))) := NockEval.op3 (NockEval.op0 (fasO_one _))
+    rwa [wut_atom] at h
+  · refine NockEval.op6_then ?_ (NockEval.op0_crash (fasO_zero _))
+    have h0 : NockEval (atom 0) (cell (atom 1) (atom 0)) (.val (atom 0)) := NockEval.op1
+    have h1 : NockEval (atom 0) (cell (atom 0) (atom 1)) (.val (atom 0)) :=
+      NockEval.op0 (fasO_one _)
+    have h := NockEval.op5 h0 h1
+    rwa [tisN_refl] at h
+
+/-- Both guards pass: the loop runs on a genuine bare atom. -/
+private theorem decg_succ (n : Nat) :
+    NockEval (atom (n + 1)) decGuarded (.val (atom n)) := by
+  refine NockEval.op6_else ?_ ?_
+  · have h : NockEval (atom (n + 1)) (cell (atom 3) (cell (atom 0) (atom 1)))
+        (.val (wut (atom (n + 1)))) := NockEval.op3 (NockEval.op0 (fasO_one _))
+    rwa [wut_atom] at h
+  · refine NockEval.op6_else ?_ (countUp_correct n)
+    have h0 : NockEval (atom (n + 1)) (cell (atom 1) (atom 0)) (.val (atom 0)) := NockEval.op1
+    have h1 : NockEval (atom (n + 1)) (cell (atom 0) (atom 1)) (.val (atom (n + 1))) :=
+      NockEval.op0 (fasO_one _)
+    have h := NockEval.op5 h0 h1
+    rwa [show tisN (atom 0) (atom (n + 1)) = atom 1 from
+      tisN_neq _ _ (by intro hc; injection hc with hc; omega)] at h
+
+/-- **Table C's `dec` row, discharged by the kernel.**  The lift is the
+    manuscript's; the guards are the manuscript's corrected to axis 1. -/
+private theorem leaf_dec (S : Noun) : NockEval S (phi .dec) (cw .dec S) := by
+  cases S with
+  | atom n =>
+    exact NockEval.autocons_crashL (NockEval.op7_crash (NockEval.op0_crash (fasO_two_atom n)))
+  | cell a r =>
+    cases a with
+    | cell x y =>
+      exact NockEval.autocons_crashL
+        (NockEval.op7 (NockEval.op0 (fasO_head _ _)) (decg_cell x y))
+    | atom m =>
+      cases m with
+      | zero =>
+        exact NockEval.autocons_crashL
+          (NockEval.op7 (NockEval.op0 (fasO_head _ _)) decg_zero)
+      | succ n =>
+        exact NockEval.autocons
+          (NockEval.op7 (NockEval.op0 (fasO_head _ _)) (decg_succ n))
+          (NockEval.op0 (fasO_tail _ _))
+
 /-- **Leaf correctness.**  For every word and every subject noun, the compiled
     Nock formula evaluates to exactly the outcome the C model specifies —
     value where the model returns, crash where the model crashes. -/
@@ -226,6 +434,7 @@ theorem leaf_correct (w : Word) (S : Noun) : NockEval S (phi w) (cw w S) := by
   · exact leaf_inc S
   · exact leaf_eq S
   · exact leaf_celq S
+  · exact leaf_dec S
 
 -- ---------------------------------------------------------------------------
 -- The two compilers and the composition theorem
@@ -290,3 +499,22 @@ example (n : Nat) (r : Noun) :
 example (n : Nat) :
     NockEval (cell (atom n) (atom 0)) (N [.swap, .drop]) .exit := by
   simpa [Csem, cw] using composition [.swap, .drop] (cell (atom n) (atom 0))
+
+-- ---------------------------------------------------------------------------
+-- Crash-totality, free from `leaf_correct`
+-- ---------------------------------------------------------------------------
+
+/-- **Every `Word` denotes a crash-total formula.**  `leaf_correct` supplies a
+    derivation at every subject, so no subject diverges.  This is the paper's
+    guard-emission rule as an enforced invariant rather than a convention. -/
+theorem word_crash_total (w : Word) (S : Noun) : ¬ Diverges S (phi w) :=
+  fun hd => hd _ (leaf_correct w S)
+
+/-- **The refusal.**  A formula that diverges anywhere is not denotable as a
+    `Word`.  Not a limitation of the model — the model correctly rejecting an
+    unguarded formula. -/
+theorem not_denotable_of_diverges {f S : Noun} (hd : Diverges S f) :
+    ¬ ∃ w : Word, phi w = f := by
+  rintro ⟨w, rfl⟩
+  exact word_crash_total w S hd
+
