@@ -1,8 +1,13 @@
-# TABLE-REPORT: trial of the paper's Tables A and B
+# TABLE-REPORT: trial of the paper's Tables A, B, and C
 
-**Verdict: all ten formulas prove as stated. No discrepancies. No corrections proposed.**
+**Tables A and B — verdict: all ten formulas prove as stated. No discrepancies.**
 
-That sentence is the one intended for the paper.
+**Table C, row `dec` — verdict: the printed listing is REFUTED. It fails on its
+entire valid domain under both possible readings, and one reading additionally
+breaks crash-totality. A correction is proposed in §C.4 and has passed the
+oracle.**
+
+Both sentences are intended for the paper.
 
 ---
 
@@ -118,3 +123,142 @@ C `dec` word modeled by `cw` (codomain `Outcome`, hence crash-total) **cannot**
 be Hoon's `decBat`, because no `Outcome` denotes divergence. Whatever `Csem`
 becomes in Phase 4b will need to accommodate that, or the guarded formula must
 be the only `dec` a word may denote.
+
+---
+
+# Table C, row `dec` — the listing is refuted
+
+Unlike Tables A and B, this row's formula does **not** survive contact with the
+kernel's evaluator. The trial was run under the §5 protocol: `phi` transcribed
+verbatim, never edited; the table is the defendant.
+
+## C.1 The defendant, verbatim
+
+Guarded-dec, as printed:
+
+```
+[6 [3 0 2] [0 0] [6 [5 [1 0] 0 2] [0 0] <count-up>]]
+```
+
+Lift footnote:
+
+```
+φ_dec = [[7 [0 2] <guarded-dec>] 0 3]
+```
+
+Canonical `<count-up>`:
+
+```
+[8 [1 0] 8 [1 6 [5 [0 7] 4 0 6] [0 6] [9 2 [0 2] [4 0 6] 0 7]] 9 2 0 1]
+```
+
+The listing admits two readings, because the guards' axis `2` is consistent
+with either. **Both fail.**
+
+## C.2 Reading A — guarded-dec runs on the bare atom, per the lift footnote
+
+The lift's `[7 [0 2] …]` extracts the stack top and runs guarded-dec against
+it. So guarded-dec's subject is a bare atom, and its guard `[3 0 2]` takes
+axis 2 *of an atom*.
+
+```
+fasO (atom 2) (atom 5)  =  none
+```
+
+`op0_crash` → `op3_crash` → `op6_crash`. **Every valid input crashes.**
+
+| subject | Table C says | `nockF 3000` gives | |
+| --- | --- | --- | --- |
+| `[1 77]` | `.val [0 77]` | `.exit` | ❌ |
+| `[2 77]` | `.val [1 77]` | `.exit` | ❌ |
+| `[5 77]` | `.val [4 77]` | `.exit` | ❌ |
+| `[[1 2] 77]` | `.exit` | **`none` — diverges** | ❌ |
+| `[0 77]` | `.exit` | `.exit` | ✅ (by accident) |
+| `9` | `.exit` | `.exit` | ✅ (by accident) |
+
+**The cell-argument row is the finding neither hand-check caught.** With a cell
+top, `fasO (atom 2)` *succeeds* (it takes the cell's head), so the cellness
+guard reads the wrong noun, returns `atom 1`, and passes. The zero guard then
+also passes, and `<count-up>` runs against a cell — comparing a cell to an atom
+forever. Confirmed `none` at fuel 50, 500, 5000.
+
+So under Reading A the printed `φ_dec` is **not crash-total**, and therefore
+not denotable as a `Word` at all: `not_denotable_of_diverges` excludes it, by
+exactly the theorem the guard-emission rule is supposed to be enforcing. The
+guard meant to reject cells is the reason the cell is accepted.
+
+## C.3 Reading B — guarded-dec runs on the stack directly
+
+Ignore the lift; let the guards see the stack, where axis 2 *is* the top. The
+guards are then correct — and `<count-up>` inherits the stack as its subject.
+Its loop test is `[5 [0 7] 4 0 6]`, and after the two `op8` pushes axis 7 holds
+the **whole stack** `[a r]`, a cell, which the atom counter never equals.
+
+| subject | Table C says | `nockF 3000` gives | |
+| --- | --- | --- | --- |
+| `[1 77]` | `.val [0 77]` | **`none` — diverges** | ❌ |
+| `[2 77]` | `.val [1 77]` | **`none` — diverges** | ❌ |
+| `[5 77]` | `.val [4 77]` | **`none` — diverges** | ❌ |
+| `[[1 2] 77]` | `.exit` | `.exit` | ✅ |
+| `[0 77]` | `.exit` | `.exit` | ✅ |
+| `9` | `.exit` | `.exit` | ✅ |
+
+Diverges at fuel 50, 500, 5000. **Every valid input diverges.**
+
+The root cause, isolated:
+
+```
+nockF 3000 (cell (atom 5) (atom 77)) <count-up>  =  none        -- stack subject
+nockF 3000 (atom 5)                  <count-up>  =  .val 4      -- bare atom subject
+```
+
+`<count-up>` is correct, and is built for a bare atom. The guards are correct
+for a stack. They cannot both be right about the same subject: **guards wrong
+or loop wrong, and the composite fails on the entire valid domain either way.**
+
+## C.4 Proposed correction — for the humans to ratify
+
+Keep the lift as printed; move the guards to axis 1, so they read the subject
+guarded-dec actually receives (the bare atom):
+
+```
+[6 [3 0 1] [0 0] [6 [5 [1 0] 0 1] [0 0] <count-up>]]
+```
+
+- `[3 0 1]` is `?subject`: a cell top → `0` → crash branch; an atom → `1` → inner guard.
+- `[5 [1 0] 0 1]` is `=(0 subject)`: zero → crash branch; else `<count-up>` on a
+  genuine bare atom, the domain it was built for.
+- Depth `< 1` still falls out of the lift's `[0 2]` for free: on a bare-atom
+  stack, `fasO (atom 2) (atom _) = none`, so `op7`'s left operand crashes.
+
+**Oracle result: 0 mismatches against Table C across a 48-subject corpus**
+(every ⊥ arm, plus a spread of valid inputs). The corrected `φ_dec` is
+crash-total, hence denotable as a `Word`.
+
+## C.5 Independent convergence
+
+Before the manuscript listing was available, this artifact derived a guarded
+`dec` from the ⊥ domain alone: stack-native, guards at axis 2, with a
+purpose-built loop core `[loopBat [b [a r]]]` (axes 14/15) rather than the
+canonical `<count-up>`. It also passes at 0 mismatches, and the two formulas
+**agree pointwise on all 48 subjects**.
+
+They converged on the *denotation*, not on the *shape* — which is the useful
+kind of convergence: two independent routes to the same ⊥ domain, one of which
+keeps the manuscript's canonical `<count-up>` and lift intact. The correction
+in §C.4 is preferred for the paper precisely because it changes two axes and
+nothing else. The artifact will carry §C.4's formula, not its own.
+
+## C.6 Note on provenance
+
+The axes in the printed listing were hand-computed and survived seven editorial
+passes. That is not a failure of care; it is a demonstration of what prose
+review can and cannot check. Reviewing an axis for plausibility is not the same
+as evaluating it against the lift printed two lines away, and `[3 0 2]` looks
+entirely plausible next to a stack convention where axis 2 is the top.
+
+This is the `hax_sixty` failure mode — a hand-computed axis under a subject
+whose shape shifts — arriving in `dec` rather than in `while`, where it was
+expected. It sharply raises the prior that the `while` schema's `L`, computed
+the same way under a subject that *grows* under `op8`, is also wrong. `while`
+gets the oracle before it gets a proof.
