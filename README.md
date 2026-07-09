@@ -8,6 +8,8 @@ This work recapitulates and extends the
 [Aleo/Leo Nock zkVM project](https://github.com/aleo-org/nock-leo) in Lean 4,
 using an inductive relational semantics as the proof target.
 
+The accompanying Lean 4 artifact is available at https://github.com/sigilante/lean-nock, tag v0.4b (commit e1496d66c10bd9b9fbab6964e421802043cd7b37).  All theorems cited in this paper are named in `Nock/Audit.lean`, whose elaboration fails the build if any footprint exceeds `{propext, Quot.sound}`, if any `sorry` is present, or if any cited name is renamed. Reproduce with `rm -rf .lake/build && lake build && ./scripts/gates.sh && ./scripts/oracle-check.sh`.
+
 ---
 
 ## Building and running
