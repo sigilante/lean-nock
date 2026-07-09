@@ -8,9 +8,10 @@ valid domain under both possible readings, and one reading additionally breaks
 crash-totality (§C). The correction of §C.4 is now **DISCHARGED (kernel)** by
 `leaf_dec`.
 
-**Class D schemas (`ifte`, `while`) — CONFIRMED (oracle).** 676 runs, five fuel
-schedules, zero mismatches, zero asymmetries (§D). *Not* discharged: mechanized
-proof awaits the Phase 4b simulation-pair theorems.
+**Class D schemas (`ifte`, `while`) — DISCHARGED (kernel).** First confirmed by
+oracle (676 runs, five fuel schedules, zero mismatches — §D), then **proved**:
+`composition_term` gives `NockEval S (NT t) o ↔ CEval t S o` over the full term
+algebra, and `composition_diverges` extends the agreement to divergence.
 
 ## Claim gradient
 
@@ -19,12 +20,19 @@ difference:
 
 | status | meaning | who says so |
 | --- | --- | --- |
-| **discharged** | a Lean theorem, kernel-checked | Tables A, B; Table C's `dec` row |
-| **confirmed** | agreement of two executable models over a corpus | Class D schemas |
+| **discharged** | a Lean theorem, kernel-checked | Tables A, B; Table C's `dec` row; the Class D schemas |
+| **confirmed** | agreement of two executable models over a corpus | *(nothing outstanding)* |
 | **prose** | argued, not executed | everything else |
 
 An oracle can refute (it did, in §C) and it can fail to refute. It cannot
-discharge.
+discharge. The Class D schemas passed through both stages in order: the oracle
+trial de-risked the design before the simulation-pair investment, and the proof
+then discharged them.
+
+**Manuscript action:** the Class D sentence — *"mechanized proof is in
+progress"* — is now false in the good direction, and is flagged for the humans
+to upgrade. The schemas are proved; cite `composition_term` and
+`composition_diverges`.
 
 ---
 
@@ -383,19 +391,34 @@ convention would yield the same noun. Replaced with a continuation of `[inc]`,
 and with a test (`[dup,inc,eq]`) that is deliberately *not* stack-preserving, so
 that a wrong exit-stack convention changes the value. Both agree.
 
-## D.7 Status, precisely
+## D.7 Status, precisely — now DISCHARGED
 
-The schemas are **confirmed (oracle)**, not **discharged (kernel)**. The
-sentence for the manuscript is:
+At the time of the trial the schemas were **confirmed (oracle)**, and the
+manuscript sentence was:
 
 > the compilation schemas of Equations (classd-ifte) and (classd-while) have
 > been empirically confirmed against a fueled model of the C semantics over 676
 > runs spanning value, crash, divergence, and nesting behavior,
 > iteration-exactly; mechanized proof is in progress.
 
-No more, no less. Discharge awaits the Phase 4b simulation pair: forward
-(`CEval t S o → NockEval S (N t) o`) and backward (`NockEval S (N t) o →
-CEval t S o`), the latter by inversion against `N`'s image grammar.
+**That sentence is now understated.** Phase 4b closed the simulation pair:
+
+```lean
+theorem composition_term (t : Term) (S : Noun) (o : Outcome) :
+    NockEval S (NT t) o ↔ CEval t S o
+
+theorem composition_diverges (t : Term) (S : Noun) :
+    Diverges S (NT t) ↔ CDiverges t S
+```
+
+Agreement on values, on crashes, **and on divergence** — the last as a
+biconditional between two absence-of-derivation statements. That is the paper's
+"equal least fixed points" made literal.
+
+The oracle's role is unchanged and remains valuable: it refuted Table C's `dec`
+row before any proof effort was spent, and it acquitted the Class D schemas
+before the simulation-pair investment was made. Empirical confirmation is what
+made the proof worth attempting; it is not what discharges it.
 
 The regression is pinned: `Nock/Oracle.lean` re-runs `sweep 4000 1500` at build
 time and prints `(632, 44, 0, 0)`.
