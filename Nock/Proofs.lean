@@ -37,6 +37,15 @@ theorem tisN_refl (a : Noun) : tisN a a = atom 0 := by simp [tisN]
 theorem tisN_neq (a b : Noun) (h : a ≠ b) : tisN a b = atom 1 := by
   simp [tisN, h]
 
+-- A cell never equals an atom, so these are the "always false" comparisons.
+-- `dec` on a cell sample loops forever precisely because the loop test
+-- `=(a +(b))` is `tisN (cell _ _) (atom _)`, i.e. permanently `atom 1`.
+theorem tisN_cell_atom (x y : Noun) (m : Nat) : tisN (cell x y) (atom m) = atom 1 := by
+  simp [tisN]
+
+theorem tisN_atom_cell (m : Nat) (x y : Noun) : tisN (atom m) (cell x y) = atom 1 := by
+  simp [tisN]
+
 -- ---------------------------------------------------------------------------
 -- fasO (/): tree address / slot
 --
@@ -84,6 +93,27 @@ theorem fasO_six   (a b c : Noun) : fasO (atom 6) (cell a (cell b c)) = some b :
   simp [fasO]
 theorem fasO_seven (a b c : Noun) : fasO (atom 7) (cell a (cell b c)) = some c := by
   simp [fasO]
+
+-- Crash lemmas: the axes a two-element stack machine can miss.
+-- All by `simp [fasO]`, never `rfl` — `fasO` is well-founded recursion.
+theorem fasO_two_atom   (n : Nat) : fasO (atom 2) (atom n) = none := by simp [fasO]
+theorem fasO_three_atom (n : Nat) : fasO (atom 3) (atom n) = none := by simp [fasO]
+theorem fasO_four_atom  (n : Nat) : fasO (atom 4) (atom n) = none := by simp [fasO]
+theorem fasO_five_atom  (n : Nat) : fasO (atom 5) (atom n) = none := by simp [fasO]
+theorem fasO_six_atom   (n : Nat) : fasO (atom 6) (atom n) = none := by simp [fasO]
+theorem fasO_seven_atom (n : Nat) : fasO (atom 7) (atom n) = none := by simp [fasO]
+
+-- Axes 4/5 descend into the head; an atom head has no sub-tree.
+theorem fasO_four_atomhead (m : Nat) (r : Noun) :
+    fasO (atom 4) (cell (atom m) r) = none := by simp [fasO]
+theorem fasO_five_atomhead (m : Nat) (r : Noun) :
+    fasO (atom 5) (cell (atom m) r) = none := by simp [fasO]
+
+-- Axes 6/7 descend into the tail; an atom tail has no sub-tree.
+theorem fasO_six_atomtail (x : Noun) (t : Nat) :
+    fasO (atom 6) (cell x (atom t)) = none := by simp [fasO]
+theorem fasO_seven_atomtail (x : Noun) (t : Nat) :
+    fasO (atom 7) (cell x (atom t)) = none := by simp [fasO]
 
 -- ---------------------------------------------------------------------------
 -- haxO (#): tree update / edit-at-axis

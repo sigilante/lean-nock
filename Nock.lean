@@ -9,4 +9,6 @@ import Nock.Proofs
 import Nock.Eval
 import Nock.Fuel
 import Nock.HoonOne
+import Nock.DecDiverges
+import Nock.Comp
 import Nock.Notation

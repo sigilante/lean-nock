@@ -91,26 +91,26 @@ def decLoopCore (b n : Nat) (ctx : Noun) : Noun :=
 -- no axioms.  (The old proofs used `native_decide` here, which pulled in
 -- `Lean.ofReduceBool`.)
 
-private def decBat_hintF : Noun :=
+def decBat_hintF : Noun :=
   n! "[[1 [[1 1717658988] [7 [[0 1] [8 [[1 [1 [100 [101 [99 [114 [101 [109 [101 [110 [116 [45 [117 [110 [100 [101 [114 [102 [108 [111 [119 0]]]]]]]]]]]]]]]]]]]]] [9 [2 [0 1]]]]]]]]] [0 1]]"
 
-private def decBat_guardBody : Noun :=
+def decBat_guardBody : Noun :=
   n! "[6 [5 [1 0] [0 6]] [[0 0] [8 [1 0] [8 [1 [6 [5 [0 30] [4 [0 6]]] [0 6] [9 2 [10 [6 [4 [0 6]]] [0 1]]]]] [9 2 [0 1]]]]]]"
 
-private def decBat_pushLoop : Noun :=
+def decBat_pushLoop : Noun :=
   n! "[8 [1 0] [8 [1 [6 [5 [0 30] [4 [0 6]]] [0 6] [9 2 [10 [6 [4 [0 6]]] [0 1]]]]] [9 2 [0 1]]]]"
 
-private theorem guardBody_parts : decBat_guardBody = cell (atom 6) (cell
+theorem guardBody_parts : decBat_guardBody = cell (atom 6) (cell
     (cell (atom 5) (cell (cell (atom 1) (atom 0)) (cell (atom 0) (atom 6))))
     (cell (cell (atom 0) (atom 0)) decBat_pushLoop)) := rfl
 
-private theorem pushLoop_parts : decBat_pushLoop = cell (atom 8) (cell (cell (atom 1) (atom 0))
+theorem pushLoop_parts : decBat_pushLoop = cell (atom 8) (cell (cell (atom 1) (atom 0))
     (cell (atom 8) (cell (cell (atom 1) decLoopBat)
       (cell (atom 9) (cell (atom 2) (cell (atom 0) (atom 1))))))) := rfl
 
 /-- The `~_` hint clue is a static cons, so it evaluates to a value whatever
     the subject.  Its value is discarded by `op11_dynamic`. -/
-private theorem dec_hint_eval (s : Noun) :
+theorem dec_hint_eval (s : Noun) :
     ∃ r, NockEval s decBat_hintF (.val r) :=
   ⟨_, NockEval.autocons NockEval.op1 (NockEval.op0 (fasO_one s))⟩
 
