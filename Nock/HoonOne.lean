@@ -203,7 +203,7 @@ theorem dec_correct (n : Nat) (ctx : Noun) :
       NockEval.op0 (by simp [fasO])
     have eq := NockEval.op5 h0 h6
     rwa [show tisN (atom 0) (atom (n + 1)) = atom 1 from
-      tisN_neq _ _ (by intro hc; simp at hc)] at eq
+      tisN_neq _ _ (by intro hc; injection hc with hc; omega)] at eq
   · -- Steps 3-5: push b=0, push loopBat, fire loop
     rw [pushLoop_parts]
     refine NockEval.op8 NockEval.op1 ?_   -- push b=0
@@ -314,7 +314,7 @@ theorem add_loop_inv (a b : Nat) (ctx : Noun) (hctx : AddCtx ctx) :
           (.val (tisN (atom 0) (atom (a + 1)))) :=
         NockEval.op5 NockEval.op1 (NockEval.op0 (by simp [addLoopCore, fasO]))
       rwa [show tisN (atom 0) (atom (a + 1)) = atom 1 from
-        tisN_neq _ _ (by intro hc; simp at hc)] at h
+        tisN_neq _ _ (by intro hc; injection hc with hc; omega)] at h
     · -- Edit sample to [dec(a+1), +(b)] = [a, b+1], fire battery
       refine NockEval.op9 (core := addLoopCore a (1 + b) ctx) (arm := addBat)
         ?_ (fasO_head _ _) ?_
@@ -446,7 +446,7 @@ theorem sub_loop_inv (a b : Nat) (ctx : Noun) (hctx : SubCtx ctx) (hab : b ≤ a
           (.val (tisN (atom 0) (atom (b + 1)))) :=
         NockEval.op5 NockEval.op1 (NockEval.op0 (by simp [subLoopCore, fasO]))
       rwa [show tisN (atom 0) (atom (b + 1)) = atom 1 from
-        tisN_neq _ _ (by intro hc; simp at hc)] at h
+        tisN_neq _ _ (by intro hc; injection hc with hc; omega)] at h
     · -- Recurse: [9 2 [10 [6 [DEC_A DEC_B]] [0 1]]]
       refine NockEval.op9 (core := subLoopCore (a - 1) b ctx) (arm := subBat)
         ?_ (fasO_head _ _) ?_
@@ -468,3 +468,4 @@ theorem sub_loop_inv (a b : Nat) (ctx : Noun) (hctx : SubCtx ctx) (hab : b ≤ a
 theorem sub_correct (a b : Nat) (ctx : Noun) (hctx : SubCtx ctx) (hab : b ≤ a) :
     NockEval (cell subBat (cell (cell (atom a) (atom b)) ctx)) subBat (.val (atom (a - b))) :=
   sub_loop_inv a b ctx hctx hab
+
