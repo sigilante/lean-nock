@@ -3,6 +3,7 @@ import Nock.Proofs
 import Nock.Eval
 import Nock.Fuel
 import Nock.Comp
+import Nock.Term
 import Nock.Notation
 open Noun
 
@@ -24,9 +25,9 @@ Class D compilation schemas on trial *before* they are proved, exactly as the
 280-noun sweep did for Tables A and B and as the 48-subject sweep did for
 Table C.  It is not, and must never become, part of any theorem's trust base.
 
-`Term` and `N`-over-`Term` are transcribed here rather than in the proof chain
-because Phase 4b is fenced pending SPEC-PHASE4B-PROOFS.  When that spec lands
-they move into the proof chain and this module imports them instead.
+`Term` and `NT` now live in `Nock/Term.lean` (proof chain); this module imports
+them.  That is the direction the quarantine permits: the oracle may import the
+proof chain, never the reverse.
 
 ## Verdict of the trial
 
@@ -39,46 +40,6 @@ Discharge awaits the Phase 4b simulation-pair theorems.
 -/
 
 namespace Oracle
-
-/-- §1 of DEFENDANT-CLASSD — RULED (a design decision, not a transcription).
-    Continuation-carrying terms mirroring `p ::= ε | w·p | ifte(q₁,q₂)·p |
-    while(p_t,p_b)·p`. -/
-inductive Term
-  | nil   : Term
-  | seq   : Word → Term → Term
-  | ifte  : Term → Term → Term → Term
-  | while : Term → Term → Term → Term
-  deriving Repr
-
-/-- §2 of DEFENDANT-CLASSD — schemas transcribed VERBATIM.  On trial; never
-    corrected to make a run pass. -/
-def N : Term → Noun
-  | .nil       => cell (atom 0) (atom 1)
-  | .seq w p   => cell (atom 7) (cell (phi w) (N p))
-  -- Λ_N(ifte(q₁,q₂)) = [6 [0 2] [7 [0 3] Λ_N(q₁)] [7 [0 3] Λ_N(q₂)]]
-  | .ifte q₁ q₂ p =>
-      cell (atom 7) (cell
-        (cell (atom 6) (cell
-          (cell (atom 0) (atom 2))
-          (cell (cell (atom 7) (cell (cell (atom 0) (atom 3)) (N q₁)))
-                (cell (atom 7) (cell (cell (atom 0) (atom 3)) (N q₂))))))
-        (N p))
-  -- Λ_N(while(p_t,p_b)) = [8 [1 L] 9 2 0 1]
-  --   L = [8 [7 [0 3] Λ_N(p_t)] [6 [0 4] [9 2 [0 6] [7 [0 5] Λ_N(p_b)]] [0 5]]]
-  | .while t b p =>
-      cell (atom 7) (cell
-        (cell (atom 8) (cell
-          (cell (atom 1)
-            (cell (atom 8) (cell
-              (cell (atom 7) (cell (cell (atom 0) (atom 3)) (N t)))
-              (cell (atom 6) (cell
-                (cell (atom 0) (atom 4))
-                (cell (cell (atom 9) (cell (atom 2)
-                        (cell (cell (atom 0) (atom 6))
-                              (cell (atom 7) (cell (cell (atom 0) (atom 5)) (N b))))))
-                      (cell (atom 0) (atom 5))))))))
-          (cell (atom 9) (cell (atom 2) (cell (atom 0) (atom 1))))))
-        (N p))
 
 /-- §4 of DEFENDANT-CLASSD — the fueled C-side model, transcribed from the C
     listings.  `none` = fuel exhausted, never a semantic verdict.  Loobean means
@@ -199,7 +160,7 @@ def classify (l r : Option Outcome) : Cls :=
     the last two components. -/
 def sweep (nf cf : Nat) : Nat × Nat × Nat × Nat :=
   let rs := progs.flatMap fun (_, t) => subjects.map fun S =>
-    classify (nockF nf S (N t)) (CsemF cf t S)
+    classify (nockF nf S (NT t)) (CsemF cf t S)
   ((rs.filter (· = .agree)).length, (rs.filter (· = .bothNone)).length,
    (rs.filter (· = .mismatch)).length, (rs.filter (· = .asym)).length)
 

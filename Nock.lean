@@ -14,4 +14,8 @@ import Nock.HoonOne
 import Nock.DecDiverges
 import Nock.Comp
 import Nock.Shim
+import Nock.Term
+import Nock.CEval
+import Nock.Backward
+import Nock.Composition
 import Nock.Notation
