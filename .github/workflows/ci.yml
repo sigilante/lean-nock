@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    name: build, gates, audit, oracle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Lean toolchain (pinned by lean-toolchain)
+        uses: leanprover/lean-action@v1
+        with:
+          auto-config: false
+          build: false
+          test: false
+          lint: false
+          use-mathlib-cache: false
+
+      # A scrubbed build. Nothing is replayed from a cache, so the audit
+      # manifest in Nock/Audit.lean is *elaborated*, not skipped -- it throws
+      # on axiom-footprint drift, on `sorry`, and on any rename of a name the
+      # companion manuscript cites.
+      - name: Scrubbed build (runs the audit manifest)
+        run: |
+          rm -rf .lake/build
+          lake build
+
+      - name: Fail on any warning
+        run: |
+          rm -rf .lake/build
+          if lake build 2>&1 | tee build.log | grep -qi 'warning'; then
+            echo "::error::build emitted warnings"; grep -i warning build.log; exit 1
+          fi
+          echo "no warnings"
+
+      - name: Repository discipline gates
+        run: ./scripts/gates.sh
+
+      # Builds Main, which audits the quarantined bridge (#audit_bridge) and
+      # re-runs the 676-run Class D oracle sweep.
+      - name: Oracle verdict preservation
+        run: ./scripts/oracle-check.sh
+
+      - name: Axiom footprints (informational)
+        run: ./scripts/print-axioms.sh

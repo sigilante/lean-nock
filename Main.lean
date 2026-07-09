@@ -4,7 +4,14 @@ import Nock.Basic
 -- proof chain does.
 import Nock.RuntimeBridge
 import Nock.Oracle
+import Nock.Audit
 open Noun
+open Nock.Audit
+
+-- The quarantined bridge is the ONLY place the compiler axioms are tolerated.
+-- Audited here rather than in Nock/Audit.lean, so the proof chain never
+-- imports RuntimeBridge.
+#audit_bridge decGate_eq decBat_eq
 
 -- Subject: [42 99]
 def subj : Noun := cell (atom 42) (atom 99)

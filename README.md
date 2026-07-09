@@ -25,27 +25,79 @@ lake exec main
 lake env lean Nock/Eval.lean
 ```
 
-All proofs are kernel-checked, with no `sorry`. The proof chain rests only on
-Lean 4's standard foundations — `propext`, `Quot.sound`, and (where `simp`
-introduces it) `Classical.choice`:
+All proofs are kernel-checked, with no `sorry`. **Every theorem in the audit
+manifest has axiom footprint `[propext, Quot.sound]` or narrower** — Lean 4's
+standard foundations, and nothing else. No `Classical.choice` anywhere on the
+public surface.
 
-```sh
-# Verify the axiom footprint of a key theorem
-lake build Nock.HoonOne
-# then in a scratch file: #print axioms dec_correct
-```
+This is not a claim you have to take on trust, and it is not checked by hand.
+`Nock/Audit.lean` is elaborated as part of `lake build`, and it **fails the
+build** on three kinds of drift:
 
-One module is exempt. `Nock/RuntimeBridge.lean` uses `native_decide` to assert
-that the noun computed by the `partial def nock` evaluator equals the
+- an axiom footprint that grows beyond `{propext, Quot.sound}`;
+- any `sorry` (which shows up as `sorryAx`);
+- any rename or deletion of a manifest name — the manifest doubles as the
+  freeze list for names the companion paper cites.
+
+One module is exempt by design. `Nock/RuntimeBridge.lean` uses `native_decide`
+to assert that the noun computed by the `partial def nock` evaluator equals the
 kernel-visible `n!` literal the proofs reason about. Those two theorems depend
 on `Lean.ofReduceBool` and `Lean.trustCompiler`: they are checked by running
 compiled code, not by the kernel. Nothing in the proof chain imports that
-module, so `#print axioms dec_correct` stays free of `ofReduceBool`. The
-invariant is enforceable by grep:
+module, so `dec_correct`'s footprint stays clean. The bridge is audited
+separately, by `#audit_bridge` in `Main.lean`.
+
+The same discipline governs `Nock/Oracle.lean`, the fueled model of the C
+semantics. The invariant there is **import direction**, not import
+disjointness: the oracle may import the proof chain, never the reverse.
+
+---
+
+## Reproducing
+
+Requires only [`elan`](https://github.com/leanprover/elan); the toolchain is
+pinned by `lean-toolchain` (Lean 4.28.0). No Mathlib, no other dependencies.
 
 ```sh
-grep -rn "by native_decide" Nock/   # only Nock/RuntimeBridge.lean
-grep -rn "panic!" Nock/             # only inside `partial def nock`
+# 1. Scrubbed build.  This elaborates the audit manifest, so a drifting
+#    axiom footprint or a stray `sorry` fails here.
+rm -rf .lake/build && lake build
+#    => Build completed successfully (17 jobs).      [0 warnings]
+
+# 2. Repository discipline gates (quarantine direction, native_decide
+#    containment, panic! containment, no sorry, no axiom declarations).
+./scripts/gates.sh
+#    => ALL GATES PASSED
+
+# 3. Class D oracle: 676 runs (26 programs x 26 subjects), re-run at build
+#    time.  A nonzero third or fourth component is a CONVICTION of the
+#    compilation schemas, to be reported -- not fixed.
+./scripts/oracle-check.sh
+#    => oracle sweep: (632, 44, 0, 0)  (0 mismatches, 0 asymmetries)
+
+# 4. Print every manifest footprint (informational; the build already
+#    enforces them).
+./scripts/print-axioms.sh
+```
+
+`lake exec main` builds the two quarantined modules (36 jobs), audits the
+bridge, and runs the oracle sweep. CI runs all four steps on every pull
+request; see `.github/workflows/ci.yml`.
+
+### Citing this artifact
+
+Theorem names in the audit manifest are **frozen API**. The manifest is the
+list; renaming any of them fails the build.
+
+```bibtex
+@software{lean-nock,
+  author  = {Davis, Neal},
+  title   = {lean-nock: a formal semantics of Nock 4K in Lean 4},
+  year    = {2026},
+  url     = {https://github.com/sigilante/lean-nock},
+  version = {v0.4b},
+  note    = {Tag \texttt{v0.4b}, commit \texttt{<COMMIT>}}
+}
 ```
 
 ---
@@ -60,14 +112,32 @@ Nock/
   Fuel.lean          — nockF fuel interpreter; soundness, completeness, determinism, divergence
   HoonOne.lean       — Hoon ++dec/++add/++sub compiled to Nock; gate-call theorem
   DecDiverges.lean   — ++dec on a cell diverges; completes dec's ⊥ profile
-  Comp.lean          — Word set, leaf contracts, and the composition theorem
+  Comp.lean          — Word set, leaf contracts, composition over the free monoid
+  Shim.lean          — mkGate/liftGate; decBat is provably not denotable as a Word
+  Term.lean          — Term algebra; NT compiler (ifte/while schemas)
+  CEval.lean         — C-side big-step semantics; the forward simulation
+  Backward.lean      — The backward simulation, by induction on fuel
+  Composition.lean   — composition_term and composition_diverges (Class D)
+  Audit.lean         — Build-enforced axiom manifest and API freeze list
   Notation.lean      — n! bracket-notation macro for Noun literals
-  RuntimeBridge.lean — native_decide bridge; NOT importable by the proof chain
-Main.lean            — Evaluator smoke tests (#eval)
+  RuntimeBridge.lean — native_decide bridge;  QUARANTINED
+  Oracle.lean        — Fueled C model (CsemF); the Class D trial;  QUARANTINED
+Main.lean            — Evaluator smoke tests; audits the bridge; runs the oracle sweep
+scripts/
+  gates.sh           — Repository discipline gates
+  oracle-check.sh    — Class D verdict preservation: (632, 44, 0, 0)
+  print-axioms.sh    — Print every manifest footprint
 ```
 
-The dependency edge that matters: `RuntimeBridge` imports `HoonOne`, never the
-reverse.  `Nock.lean` re-exports everything *except* `RuntimeBridge`.
+The dependency edge that matters is **direction**.  Both quarantined modules
+import the proof chain; nothing in the proof chain imports either of them.
+`Nock.lean` re-exports everything *except* the two quarantined modules, and
+`scripts/gates.sh` enforces this on every build.
+
+Note that `nockF` (in `Fuel.lean`) is proof-chain-legal and load-bearing: it is
+the induction measure for the backward simulation, since `NockEval` is
+`Prop`-valued and admits no height measure.  The quarantine governs `CsemF`,
+the *C-side* oracle — not `nockF`.
 
 ---
 
