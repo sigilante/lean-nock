@@ -1,4 +1,7 @@
 import Nock.Basic
+-- The runtime/prover bridge is `native_decide`-backed.  Only the executable
+-- imports it; nothing in the proof chain does.
+import Nock.RuntimeBridge
 open Noun
 
 -- Subject: [42 99]
