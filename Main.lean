@@ -1,7 +1,9 @@
 import Nock.Basic
--- The runtime/prover bridge is `native_decide`-backed.  Only the executable
--- imports it; nothing in the proof chain does.
+-- The runtime/prover bridge is `native_decide`-backed, and the Class D oracle
+-- is a fueled testing model.  Only the executable imports them; nothing in the
+-- proof chain does.
 import Nock.RuntimeBridge
+import Nock.Oracle
 open Noun
 
 -- Subject: [42 99]

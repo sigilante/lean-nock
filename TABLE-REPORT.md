@@ -1,13 +1,30 @@
-# TABLE-REPORT: trial of the paper's Tables A, B, and C
+# TABLE-REPORT: trial of the paper's Tables A, B, C, and the Class D schemas
 
-**Tables A and B — verdict: all ten formulas prove as stated. No discrepancies.**
+**Tables A and B — DISCHARGED (kernel).** All ten formulas prove as stated.
+No discrepancies.
 
-**Table C, row `dec` — verdict: the printed listing is REFUTED. It fails on its
-entire valid domain under both possible readings, and one reading additionally
-breaks crash-totality. A correction is proposed in §C.4 and has passed the
-oracle.**
+**Table C, row `dec` — the printed listing was REFUTED**; it fails on its entire
+valid domain under both possible readings, and one reading additionally breaks
+crash-totality (§C). The correction of §C.4 is now **DISCHARGED (kernel)** by
+`leaf_dec`.
 
-Both sentences are intended for the paper.
+**Class D schemas (`ifte`, `while`) — CONFIRMED (oracle).** 676 runs, five fuel
+schedules, zero mismatches, zero asymmetries (§D). *Not* discharged: mechanized
+proof awaits the Phase 4b simulation-pair theorems.
+
+## Claim gradient
+
+The three words are not interchangeable and the paper must respect the
+difference:
+
+| status | meaning | who says so |
+| --- | --- | --- |
+| **discharged** | a Lean theorem, kernel-checked | Tables A, B; Table C's `dec` row |
+| **confirmed** | agreement of two executable models over a corpus | Class D schemas |
+| **prose** | argued, not executed | everything else |
+
+An oracle can refute (it did, in §C) and it can fail to refute. It cannot
+discharge.
 
 ---
 
@@ -262,3 +279,123 @@ whose shape shifts — arriving in `dec` rather than in `while`, where it was
 expected. It sharply raises the prior that the `while` schema's `L`, computed
 the same way under a subject that *grows* under `op8`, is also wrong. `while`
 gets the oracle before it gets a proof.
+
+---
+
+# Class D schemas — acquitted by oracle
+
+The `ifte` and `while` compilation schemas of DEFENDANT-CLASSD §2 (manuscript
+Equations classd-ifte and classd-while) were put on trial under the §5 protocol:
+transcribed verbatim, never corrected, the schema is the defendant.
+
+**Verdict: no conviction on any claim.** `L` is not refuted by this corpus.
+
+## D.1 Method
+
+The trial compares two independent executable models of the same program:
+
+- **Nock side** — `nockF fuel S (N t)`, the fuel interpreter of `Nock/Fuel.lean`,
+  applied to the compiled formula. Tied to the `NockEval` relation by
+  `nockF_sound` / `nockF_complete`.
+- **C side** — `CsemF fuel t S`, a fueled transcription of the manuscript's C
+  listings (`Nock/Oracle.lean`). Quarantined by import direction; nothing in the
+  proof chain imports it.
+
+`none` means *fuel exhausted* on both sides, never a semantic verdict. A
+**mismatch** is two differing verdicts; an **asymmetry** is one side reaching a
+verdict while the other does not. Asymmetry is the conviction column: it is how
+a divergence-vs-crash disagreement would surface.
+
+## D.2 Corpus
+
+**26 programs × 26 subjects = 676 runs** per fuel schedule.
+
+Programs cover all seven required probe classes plus nesting: `while`-in-body,
+`while`-in-branch, `ifte`-in-body, `ifte`-in-test, sequenced continuations after
+each, and the Class C `dec` word inside both a loop body and a continuation.
+
+Subjects: atoms (`0,1,2,9`); depth-1 stacks with loobean, non-loobean-atom, and
+cell tops; left-spine nouns of depth 0–3; counter-carrying stacks `[a [c rest]]`;
+a two-cell stack; a depth-3 flat stack.
+
+## D.3 Fuel schedule and results
+
+| `(nockF, CsemF)` | agree | both `none` | **mismatch** | **asymmetric** |
+| --- | --- | --- | --- | --- |
+| 500 / 200 | 632 | 44 | **0** | **0** |
+| 2 000 / 800 | 632 | 44 | **0** | **0** |
+| 4 000 / 1 500 | 632 | 44 | **0** | **0** |
+| 20 000 / 5 000 | 632 | 44 | **0** | **0** |
+| 60 000 / 20 000 | 632 | 44 | **0** | **0** |
+
+Counts are identical at every schedule. The 44 two-sided `none` are confined to
+exactly the two designed-divergent programs and persist to the top schedule, so
+they are divergence rather than fuel exhaustion.
+
+## D.4 Mismatch table
+
+*(empty)*
+
+## D.5 Probe results
+
+| class | probe | both sides |
+| --- | --- | --- |
+| 1 value paths | `while([dup,celq],[head])`, spine depth 0–3 | `.val`; exit value tracks iteration count |
+| 2 ifte branches | flag `0` / flag `1` | `.val`, correct branch |
+| 2 non-loobean | flag `atom 2`, `atom 9`, cell | `.exit` |
+| 3 flag-pop on atom | `ifte` on atom subject; `while` test → atom | `.exit` |
+| 4 crash in body | `while([dup,eq],[head])`, depths 1–3 | `.exit` |
+| 4′ iteration-exact | counter `c`, spine depth 3, body `[head,swap,dec,swap]` | `c<3` → `.exit`; `c≥3` → `.val`, counter `c−3` |
+| 5 divergence | two-sided `none`, fuels 10…5 000 | `none` |
+| 6 nesting | while-in-body, while-in-branch, ifte-in-body, ifte-in-test | `.val` |
+| 6 exit-stack convention | `while([dup,inc,eq],[])` + `[celq]` continuation | `.val` |
+| 7 crash hides continuation | crash in loop, continuation `[inc]` | `.exit`; and `.val` when no crash |
+
+Probe 4′ is the sharp one. It is fuel-independent and iteration-exact: an
+off-by-one on either side flips a crash into a value, or shifts the returned
+counter. It does neither. This is what licenses the word *iteration-exactly* in
+the manuscript sentence.
+
+Claims W1–W6 and I1 of DEFENDANT-CLASSD §3 are each exercised and none convicts.
+
+## D.6 Errata in the suggested generators (not defects in the schemas)
+
+Two of §5's suggested probe generators do not do what they were expected to.
+Both are facts about the generators; neither bears on `L`.
+
+**1. `while([dup,eq],[])` does not diverge.** Both sides return `.exit`, and
+agree. The datum:
+
+```
+CsemF 50 [dup,eq] [A1, 0]  =  .val (cell (atom 0) (atom 0))
+```
+
+`[dup,eq]` is **net-0** arity — `dup` pushes, `eq` pops two and pushes one — so
+the test *consumes* the stack top rather than preserving it. Its output stack is
+`atom 0`, and the next iteration's `dup` crashes on that atom. The divergence
+class was therefore exercised by `while([dup,dup,eq],[])`, which is net-+1,
+preserves the stack, and has flag `0` always; and by the same test with a
+non-empty body. Both give two-sided `none` at every fuel tried.
+
+**2. `while([dup,celq],[head])` with continuation `[celq]` is not
+discriminating.** `wut` is idempotent on the exit value, so a wrong `S′`
+convention would yield the same noun. Replaced with a continuation of `[inc]`,
+and with a test (`[dup,inc,eq]`) that is deliberately *not* stack-preserving, so
+that a wrong exit-stack convention changes the value. Both agree.
+
+## D.7 Status, precisely
+
+The schemas are **confirmed (oracle)**, not **discharged (kernel)**. The
+sentence for the manuscript is:
+
+> the compilation schemas of Equations (classd-ifte) and (classd-while) have
+> been empirically confirmed against a fueled model of the C semantics over 676
+> runs spanning value, crash, divergence, and nesting behavior,
+> iteration-exactly; mechanized proof is in progress.
+
+No more, no less. Discharge awaits the Phase 4b simulation pair: forward
+(`CEval t S o → NockEval S (N t) o`) and backward (`NockEval S (N t) o →
+CEval t S o`), the latter by inversion against `N`'s image grammar.
+
+The regression is pinned: `Nock/Oracle.lean` re-runs `sweep 4000 1500` at build
+time and prints `(632, 44, 0, 0)`.
