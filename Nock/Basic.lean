@@ -16,73 +16,78 @@ def wut : Noun → Noun
   | atom _ => atom 1
   | cell _ _ => atom 0
 
--- +[a b]              +[a b]
+/-! ## Primitives
+
+Nock's `+`, `=`, `/`, `#` are partial: they crash on ill-formed arguments.
+We model a crash as `none`, never as a panic.  A `panic!` in a proof-facing
+definition would reduce to `Inhabited.default = atom 0` inside Lean's logic,
+which would let the semantics certify that a crashing computation returns
+zero.  The only permitted `panic!` in this file is inside `partial def nock`,
+the runtime evaluator, which is never reasoned about. -/
+
+-- +[a b]              +[a b]   (crash)
 -- +a                  1 + a
-def lus : Noun → Noun
-  | atom a => atom (1 + a)
-  | cell _ _ => panic! "crash: lus on cell"
+def lusO : Noun → Option Noun
+  | atom a   => some (atom (1 + a))
+  | cell _ _ => none
 
 -- =[a a]              0
 -- =[a b]              1
-def tis : Noun → Noun
-  | cell a b => if a = b then atom 0 else atom 1
-  | atom _ => panic! "crash: tis on atom"
+-- Total: the relation always supplies two nouns, so there is no crash arm.
+def tisN (a b : Noun) : Noun := if a = b then atom 0 else atom 1
 
 -- /[1 a]              a
 -- /[2 a b]            a
 -- /[3 a b]            b
 -- /[(a + a) b]        /[2 /[a b]]
 -- /[(a + a + 1) b]    /[3 /[a b]]
--- /a                  /a
-mutual
-def fas : Noun → Noun → Noun
-  | atom 0,     _    => panic! "crash: axis 0"
-  | atom 1, a        => a
-  | atom 2, atom _   => panic! "crash: head of atom"
-  | atom 2, cell a _ => a
-  | atom 3, atom _   => panic! "crash: tail of atom"
-  | atom 3, cell _ b => b
-  | atom (n + 4), b =>
-    -- /[(2a) b]   = /[2 /[a b]]  recurse first, then take head
-    -- /[(2a+1) b] = /[3 /[a b]]  recurse first, then take tail
-    let sub : Noun := fas (atom ((n + 4) / 2)) b
-    if (n + 4) % 2 = 0 then
-      match sub with
-      | atom _ => panic! "crash: head of atom"
-      | cell hd _ => hd
-    else
-      match sub with
-      | atom _ => panic! "crash: tail of atom"
-      | cell _ tl => tl
-    | cell _ _,   _    => panic! "crash: axis cell"
-termination_by
-  axis _ =>
-    match axis with
-    | atom n => n
-    | cell _ _ => 0
-end
+-- /a                  /a       (crash)
+def fasO : Noun → Noun → Option Noun
+  | atom 0, _        => none
+  | atom 1, a        => some a
+  | atom 2, atom _   => none
+  | atom 2, cell a _ => some a
+  | atom 3, atom _   => none
+  | atom 3, cell _ b => some b
+  | atom (n + 4), b  =>
+      -- /[(2a) b]   = /[2 /[a b]]  recurse first, then take head
+      -- /[(2a+1) b] = /[3 /[a b]]  recurse first, then take tail
+      match fasO (atom ((n + 4) / 2)) b with
+      | some (cell hd tl) => if (n + 4) % 2 = 0 then some hd else some tl
+      | some (atom _)     => none
+      | none              => none
+  | cell _ _, _      => none
+termination_by axis _ => match axis with | atom n => n | cell _ _ => 0
+decreasing_by omega
 
 -- #[1 a b]            a
 -- #[(a + a) b c]      #[a [b /[(a + a + 1) c]] c]
 -- #[(a + a + 1) b c]  #[a [/[(a + a) c] b] c]
--- #a                  #a
-mutual
-def hax : Noun → Noun → Noun → Noun
-  | atom 0,     _, _ => panic! "crash: hax axis 0"
-  | atom 1,     a, _ => a
+-- #a                  #a       (crash)
+def haxO : Noun → Noun → Noun → Option Noun
+  | atom 0, _, _       => none
+  | atom 1, a, _       => some a
   | atom (n + 2), b, c =>
-    let a : Nat := (n + 2) / 2
-    if (n + 2) % 2 = 0 then
-      hax (atom a) (cell b (fas (atom (a + a + 1)) c)) c
-    else
-      hax (atom a) (cell (fas (atom (a + a)) c) b) c
-  | cell _ _,   _,   _   => panic! "crash: hax non-atom axis"
-termination_by
-  axis _ _ =>
-    match axis with
-    | atom n => n
-    | cell _ _ => 0
-end
+      let a : Nat := (n + 2) / 2
+      if (n + 2) % 2 = 0 then
+        match fasO (atom (a + a + 1)) c with
+        | some sib => haxO (atom a) (cell b sib) c
+        | none     => none
+      else
+        match fasO (atom (a + a)) c with
+        | some sib => haxO (atom a) (cell sib b) c
+        | none     => none
+  | cell _ _, _, _     => none
+termination_by axis _ _ => match axis with | atom n => n | cell _ _ => 0
+decreasing_by all_goals omega
+
+/-! ## Runtime evaluator
+
+`partial def nock` exists for `#eval` and for extracting a working
+interpreter.  It is opaque to the kernel and nothing in the proof chain
+mentions it.  This is the one place `panic!` is allowed: each call site
+that receives `none` from a primitive panics there, rather than the
+primitive panicking on its own behalf. -/
 
 mutual
 partial def nock : Noun → Noun → Noun
@@ -96,7 +101,10 @@ partial def nock : Noun → Noun → Noun
     | atom opcode =>
       match opcode with
       -- *[a 0 b]            /[b a]
-      | 0 => fas fol a
+      | 0 =>
+        match fasO fol a with
+        | some r => r
+        | none   => panic! "crash: fas"
       -- *[a 1 b]            b
       | 1 => fol
       -- *[a 2 b c]          *[*[a b] *[a c]]
@@ -107,11 +115,14 @@ partial def nock : Noun → Noun → Noun
       -- *[a 3 b]            ?*[a b]
       | 3 => wut (nock a fol)
       -- *[a 4 b]            +*[a b]
-      | 4 => lus (nock a fol)
+      | 4 =>
+        match lusO (nock a fol) with
+        | some r => r
+        | none   => panic! "crash: lus on cell"
       -- *[a 5 b c]          =[*[a b] *[a c]]
       | 5 =>
         match fol with
-        | cell b c => tis (cell (nock a b) (nock a c))
+        | cell b c => tisN (nock a b) (nock a c)
         | _ => panic! "crash: invalid formula for opcode 5"
       -- *[a 6 b c d]        *[a *[[c d] 0 *[[2 3] 0 *[a 4 4 b]]]]
       | 6 =>
@@ -144,7 +155,9 @@ partial def nock : Noun → Noun → Noun
       | 10 =>
         match fol with
         | cell (cell b c) d =>
-          hax b (nock a c) (nock a d)
+          match haxO b (nock a c) (nock a d) with
+          | some r => r
+          | none   => panic! "crash: hax"
         | _ => panic! "crash: invalid formula for opcode 10"
       -- *[a 11 [b c] d]     *[[*[a c] *[a d]] 0 3]
       -- *[a 11 b c]         *[a c]

@@ -25,13 +25,27 @@ lake exec main
 lake env lean Nock/Eval.lean
 ```
 
-All proofs are kernel-checked. No `sorry`, no custom axioms — only Lean 4's
-standard foundations (`propext`, `Quot.sound`):
+All proofs are kernel-checked, with no `sorry`. The proof chain rests only on
+Lean 4's standard foundations — `propext`, `Quot.sound`, and (where `simp`
+introduces it) `Classical.choice`:
 
 ```sh
 # Verify the axiom footprint of a key theorem
 lake build Nock.HoonOne
-# then in a scratch file: #print axioms callGate_gate_eval
+# then in a scratch file: #print axioms dec_correct
+```
+
+One module is exempt. `Nock/RuntimeBridge.lean` uses `native_decide` to assert
+that the noun computed by the `partial def nock` evaluator equals the
+kernel-visible `n!` literal the proofs reason about. Those two theorems depend
+on `Lean.ofReduceBool` and `Lean.trustCompiler`: they are checked by running
+compiled code, not by the kernel. Nothing in the proof chain imports that
+module, so `#print axioms dec_correct` stays free of `ofReduceBool`. The
+invariant is enforceable by grep:
+
+```sh
+grep -rn "by native_decide" Nock/   # only Nock/RuntimeBridge.lean
+grep -rn "panic!" Nock/             # only inside `partial def nock`
 ```
 
 ---
@@ -40,12 +54,18 @@ lake build Nock.HoonOne
 
 ```
 Nock/
-  Basic.lean    — Noun type; wut, lus, tis, fas, hax primitives; nock evaluator
-  Proofs.lean   — Proved lemmas for fas and hax (tree navigation and edit)
-  Eval.lean     — NockEval inductive relation (the proof target)
-  HoonOne.lean  — Hoon ++dec gate compiled to Nock; callGate helper; gate-call theorem
-Main.lean       — Evaluator smoke tests (#eval)
+  Basic.lean         — Noun type; wut, lusO, tisN, fasO, haxO primitives; nock evaluator
+  Proofs.lean        — Proved lemmas for fasO and haxO (tree navigation and edit)
+  Eval.lean          — Outcome type; NockEval inductive relation (the proof target)
+  Fuel.lean          — nockF fuel interpreter; soundness, completeness, determinism, divergence
+  HoonOne.lean       — Hoon ++dec/++add/++sub compiled to Nock; gate-call theorem
+  Notation.lean      — n! bracket-notation macro for Noun literals
+  RuntimeBridge.lean — native_decide bridge; NOT importable by the proof chain
+Main.lean            — Evaluator smoke tests (#eval)
 ```
+
+The dependency edge that matters: `RuntimeBridge` imports `HoonOne`, never the
+reverse.  `Nock.lean` re-exports everything *except* `RuntimeBridge`.
 
 ---
 
@@ -53,19 +73,30 @@ Main.lean       — Evaluator smoke tests (#eval)
 
 ### The proof target: `NockEval`
 
-`NockEval subject formula result : Prop` is an inductive relation with one
-constructor per Nock 4K rule.  It is **the formal specification of Nock execution**
-and the direct target for zkVM proofs.
+`NockEval subject formula outcome : Prop` is an inductive relation with one
+constructor per Nock 4K rule, plus explicit crash constructors.  It is **the
+formal specification of Nock execution** and the direct target for zkVM proofs.
 
 ```lean
-inductive NockEval : Noun → Noun → Noun → Prop where
-  | op0  : NockEval a (cell (atom 0) fol) (fas fol a)
-  | op1  : NockEval a (cell (atom 1) fol) fol
-  | op9  : NockEval a c core →
-           NockEval core (fas b core) r →
-           NockEval a (cell (atom 9) (cell b c)) r
-  -- ... one constructor per opcode
+inductive Outcome
+  | val  : Noun → Outcome
+  | exit : Outcome
+
+inductive NockEval : Noun → Noun → Outcome → Prop where
+  | crash_malformed : Malformed f = true → NockEval a f .exit
+  | op0       : fasO fol a = some r → NockEval a (cell (atom 0) fol) (.val r)
+  | op0_crash : fasO fol a = none   → NockEval a (cell (atom 0) fol) .exit
+  | op1       : NockEval a (cell (atom 1) fol) (.val fol)
+  | op9       : NockEval a c (.val core) → fasO b core = some arm →
+                NockEval core arm o →
+                NockEval a (cell (atom 9) (cell b c)) o
+  -- ... one constructor per opcode, plus its crash-propagation variants
 ```
+
+Note the shape of `op9`: its outcome `o` is passed through unchanged from the
+tail-position subcomputation.  Only an intermediate result that a rule itself
+*consumes* (like `core` above) needs a `.val` hypothesis and a matching
+explicit crash constructor.
 
 A ZK proof that a Nock computation happened is precisely a proof that a
 `NockEval` derivation exists.  Each constructor maps to a circuit constraint.
@@ -76,26 +107,37 @@ A ZK proof that a Nock computation happened is precisely a proof that a
 so no equations can be proved about it.  The `nock` evaluator in `Basic.lean`
 is kept for `#eval` testing only.  All formal reasoning goes through `NockEval`.
 
-To connect the evaluator to the relation (soundness + completeness), a
-fuel-based `def nockF (fuel : Nat) : Noun → Noun → Option Noun` is planned —
-see [Roadmap](#roadmap) below.
+`Nock/Fuel.lean` connects a *transparent* evaluator to the relation:
+`nockF : Nat → Noun → Noun → Option Outcome`, where `none` means fuel
+exhausted (no verdict) and `some .exit` means a real crash.  `nockF_sound`
+and `nockF_complete` prove the two agree, which in turn yields determinism
+and a statable notion of divergence.
 
 ### Primitive layers
 
-`fas` (tree address) and `hax` (tree edit) are transparent `def`s with full
-lemma libraries:
+`fasO` (tree address) and `haxO` (tree edit) are transparent, `Option`-valued
+`def`s with full lemma libraries.  They return `none` exactly where Nock
+crashes: axis 0, an axis into an atom, a cell axis.
 
 | Layer | Theorems |
 |---|---|
-| `fas` base cases | `fas_one`, `fas_head`, `fas_tail` |
-| `fas` recursion | `fas_rec_even`, `fas_rec_odd` |
-| `fas` corollaries | `fas_four` … `fas_seven` |
-| `hax` base case | `hax_one` |
-| `hax` recursion | `hax_rec_even`, `hax_rec_odd` |
-| `hax` corollaries | `hax_two`, `hax_three`, `hax_six` |
+| `fasO` base cases | `fasO_one`, `fasO_head`, `fasO_tail`, `fasO_zero` |
+| `fasO` recursion | `fasO_rec_even`, `fasO_rec_odd` |
+| `fasO` corollaries | `fasO_four` … `fasO_seven` |
+| `haxO` base case | `haxO_one`, `haxO_zero` |
+| `haxO` recursion | `haxO_rec_even`, `haxO_rec_odd` |
+| `haxO` corollaries | `haxO_two`, `haxO_three`, `haxO_six` |
 
-`hax_six` is the key lemma for gate calls: replacing axis 6 (sample) in a
-standard gate `[battery [sample context]]` leaves the battery intact.
+The recursion equations and `haxO_two`/`haxO_three` are stated conditionally on
+the sub-lookup succeeding (`fasO ... = some t`) rather than with `.get!`, which
+would reintroduce the `Inhabited.default` hole the `Option` refactor closes.
+
+`haxO_six` is the key lemma for gate calls: replacing axis 6 (sample) in a
+standard gate `[battery [sample context]]` leaves the battery intact.  It is
+unconditional — the gate shape guarantees both sibling lookups succeed.
+
+Note that `fasO` and `haxO` compile by well-founded recursion, so they do not
+reduce under `rfl`.  Use the named lemmas, not `decide`.
 
 ---
 
@@ -136,7 +178,6 @@ See the [zkVM architecture](#zkvm-architecture) section below for the full plan.
 
 - Cryptographic jets (SHA-256 etc.) — Nock formulas are too large for in-circuit proof
 - Hoon type system soundness (`++nest`, `++mull`) — multi-year project
-- Divergence / `~` (requires fuel semantics to state)
 - Executable ZK prover — we verify the *circuit design*, not build a prover
 
 ---
@@ -347,13 +388,38 @@ steps).  Practical deployment would require either:
 
 ### Crash completeness
 
-Our proofs handle crashes by *absence*: `sub_correct` requires `b ≤ a`, and
-no `NockEval` derivation exists when `b > a`.  The circuit must also correctly
-*reject* invalid computations.  This requires either:
-- Explicit crash states in the circuit (the Zorp approach: `⊥` in the
-  transition function)
-- A fuel-based interpreter returning `none`, with a soundness proof that
-  `none` implies no `NockEval` derivation exists
+Nock computations are three-valued, and `NockEval` now represents all three:
+
+| outcome | representation |
+| --- | --- |
+| returns a noun `n` | `Outcome.val n` |
+| crashes | `Outcome.exit` |
+| diverges | *no derivation exists* |
+
+Crashes used to be represented by absence too, which was unsound rather than
+merely incomplete. The primitives `fas`, `hax`, `lus`, `tis` handled their
+crash arms with `panic!`, and in Lean's logic `panic!` reduces to
+`Inhabited.default`, which for `Noun` is `atom 0`. So the relation certified
+that axis-0 lookup returns `0`, that incrementing a cell returns `0`, and —
+worst — that `dec 0` returns `0`. `Option`-valued primitives plus
+`Outcome.exit` close that hole; `dec_underflow` now proves the crash.
+
+Divergence remains absence-of-derivation, which is standard for a big-step
+semantics, but it is no longer *unstatable*. `Nock/Fuel.lean` gives a fuel
+interpreter `nockF : Nat → Noun → Noun → Option Outcome` and proves it agrees
+with the relation (`nockF_sound`, `nockF_complete`, `nockF_mono`), whence:
+
+- `NockEval.deterministic` — a subject and formula admit at most one outcome.
+  Proved by pushing both derivations through the *function* `nockF` at a
+  common fuel, not by double induction on the derivations.
+- `diverges_iff_fuel : Diverges a f ↔ ∀ k, nockF k a f = none`.
+
+Determinism depends on evaluation being left-to-right and strict: the
+crash-propagation constructors encode that order, and a "right operand crashes
+first" variant anywhere would give some formulas two distinct outcomes.
+
+The circuit must correctly *reject* invalid computations, which now has a
+target to match: the `Outcome.exit` arm of the relation.
 
 ### No Mathlib
 
