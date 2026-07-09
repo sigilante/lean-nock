@@ -59,6 +59,8 @@ Nock/
   Eval.lean          — Outcome type; NockEval inductive relation (the proof target)
   Fuel.lean          — nockF fuel interpreter; soundness, completeness, determinism, divergence
   HoonOne.lean       — Hoon ++dec/++add/++sub compiled to Nock; gate-call theorem
+  DecDiverges.lean   — ++dec on a cell diverges; completes dec's ⊥ profile
+  Comp.lean          — Word set, leaf contracts, and the composition theorem
   Notation.lean      — n! bracket-notation macro for Noun literals
   RuntimeBridge.lean — native_decide bridge; NOT importable by the proof chain
 Main.lean            — Evaluator smoke tests (#eval)
@@ -404,6 +406,12 @@ that axis-0 lookup returns `0`, that incrementing a cell returns `0`, and —
 worst — that `dec 0` returns `0`. `Option`-valued primitives plus
 `Outcome.exit` close that hole; `dec_underflow` now proves the crash.
 
+All three outcomes are exercised by a single formula. The complete ⊥ profile of
+Hoon's compiled `++dec` is machine-checked: `atom (n+1)` returns `atom n`
+(`dec_correct`), `atom 0` crashes (`dec_underflow`), and a cell **diverges**
+(`dec_cell_diverges`) — the zero-guard passes on a cell, and the count-up loop
+then compares a cell against an atom forever.
+
 Divergence remains absence-of-derivation, which is standard for a big-step
 semantics, but it is no longer *unstatable*. `Nock/Fuel.lean` gives a fuel
 interpreter `nockF : Nat → Noun → Noun → Option Outcome` and proves it agrees
@@ -420,6 +428,39 @@ first" variant anywhere would give some formulas two distinct outcomes.
 
 The circuit must correctly *reject* invalid computations, which now has a
 target to match: the `Outcome.exit` arm of the relation.
+
+### Composition
+
+`Nock/Comp.lean` mechanizes the **Nock side and the composition schema** of the
+co-derivation pipeline. A `Word` is one of ten stack operations; `phi w` is its
+Nock formula; `N` compiles a word list to a single formula by right-nested
+`op7`; `Csem` runs the list through a model of the C routines.
+
+```lean
+theorem leaf_correct (w : Word) (S : Noun)   : NockEval S (phi w) (cw w S)
+theorem composition  (p : Prog) (S : Noun)   : NockEval S (N p) (Csem p S)
+theorem composition_agree (p : Prog) (S : Noun) {o : Outcome}
+    (h : NockEval S (N p) o) : o = Csem p S
+```
+
+Each leaf theorem carries the value clause and the crash clause at once, since
+`cw w S` is by definition whichever applies; `composition_agree` adds
+exclusivity via determinism. Crash propagation is inherited from `op7`'s
+left-to-right strictness: once a word crashes, the rest of the program is
+evaluated on neither side.
+
+**Scope.** The C side is a *shallow model* — `cw : Word → Noun → Outcome` is a
+Lean function standing in for a C routine. What is proved is that the compiled
+Nock formula agrees with the modeled semantics of the C routine, for every word
+and every subject noun. The gap between the model `cw` and any actual C
+implementation is deliberately outside this development. This repository does
+**not** claim verified C, a verified compiler to C, or verified jets. The
+accurate claim is: *the composition schema is kernel-checked; the C routines
+are modeled, not compiled.*
+
+The ten formulas are transcribed verbatim from the companion paper's Tables A
+and B and were put on trial rather than assumed. All ten prove as stated; see
+[`TABLE-REPORT.md`](TABLE-REPORT.md).
 
 ### No Mathlib
 
