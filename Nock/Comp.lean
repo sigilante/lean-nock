@@ -60,7 +60,7 @@ definitionally only in this order.
 inductive Word
   | dup | drop | swap | over | cons | head | tail   -- Class A
   | inc | eq | celq                                 -- Class B  (celq = cel?)
-  | dec                                             -- Class C
+  | dec | add | sub                                 -- Class C
   deriving DecidableEq, Repr
 
 -- ---------------------------------------------------------------------------
@@ -102,6 +102,82 @@ def decGuarded : Noun :=
 def liftUnary (g : Noun) : Noun :=
   cell (cell (atom 7) (cell (cell (atom 0) (atom 2)) g)) (cell (atom 0) (atom 3))
 
+-- ---------------------------------------------------------------------------
+-- Class C: guarded `add` and `sub`
+--
+-- Both are binary.  `liftBinary` hands the operation the pair `[a b]` built
+-- from a stack `[b [a rest]]` (b on top), and conses the result onto `rest`.
+-- `guardPair` is the Λ-emitted domain guard: it crashes unless both operands
+-- are atoms.  Behind the guards:
+--
+-- * `add` is an **inc-loop**: count `c` up from 0 to `b`, incrementing an
+--   accumulator that starts at `a`.  Opcode 4 only; one loop.
+-- * `sub` is a **dec-loop**: while `b ≠ 0`, decrement both operands, each by
+--   the guarded `dec` above (a nested loop).  When `b > a`, `a` reaches 0
+--   first and the guarded `dec` crashes — so the `b > a` crash of Table C is
+--   inherited from the `dec` guard rather than tested separately.
+-- ---------------------------------------------------------------------------
+
+/-- Guard both elements of a pair `[a b]` to be atoms, then run `k`.
+
+      [6 [3 0 2] [0 0] [6 [3 0 3] [0 0] k]] -/
+def guardPair (k : Noun) : Noun :=
+  cell (atom 6) (cell (n! "[3 0 2]")
+    (cell (n! "[0 0]")
+      (cell (atom 6) (cell (n! "[3 0 3]") (cell (n! "[0 0]") k)))))
+
+/-- Lift a binary operation on a pair `[a b]` to a stack word on
+    `[b [a rest]]`: build the pair, run `g`, cons the result onto `rest`.
+
+      [[7 [[0 6] 0 2] g] 0 7]
+
+    The depth guard is free: on a stack of depth < 2, `[0 6]` crashes. -/
+def liftBinary (g : Noun) : Noun :=
+  cell (cell (atom 7) (cell (cell (cell (atom 0) (atom 6)) (cell (atom 0) (atom 2))) g))
+       (cell (atom 0) (atom 7))
+
+/-- The `add` loop battery.  Core `[bat [c [acc b]]]`: axis 6 = counter,
+    14 = accumulator, 15 = bound.  Return `acc` when `c = b`, else bump both. -/
+def wAddBat : Noun :=
+  n! "[6 [5 [0 6] 0 15] [0 14] [9 2 [0 2] [4 0 6] [4 0 14] 0 15]]"
+
+/-- The loop core `[wAddBat [c [acc b]]]`. -/
+def wAddCore (c acc b : Nat) : Noun :=
+  cell wAddBat (cell (atom c) (cell (atom acc) (atom b)))
+
+/-- On a pair `[a b]`: push counter 0, push the battery, fire.
+
+      [8 [1 0] 8 [1 wAddBat] 9 2 0 1] -/
+def wAddLoop : Noun :=
+  cell (atom 8) (cell (n! "[1 0]")
+    (cell (atom 8) (cell (cell (atom 1) wAddBat) (n! "[9 2 0 1]"))))
+
+def addGuarded : Noun := guardPair wAddLoop
+
+/-- The `sub` loop's core rebuild: `[bat [dec(a) dec(b)]]`, each `dec` the
+    guarded one.  `[[0 2] [7 [0 6] <guarded-dec>] 7 [0 7] <guarded-dec>]` -/
+def wSubRebuild : Noun :=
+  cell (n! "[0 2]")
+    (cell (cell (atom 7) (cell (n! "[0 6]") decGuarded))
+          (cell (atom 7) (cell (n! "[0 7]") decGuarded)))
+
+/-- The `sub` loop battery.  Core `[bat [a b]]`: return `a` when `b = 0`,
+    else decrement both and fire again.
+
+      [6 [5 [1 0] 0 7] [0 6] [9 2 wSubRebuild]] -/
+def wSubBat : Noun :=
+  cell (atom 6) (cell (n! "[5 [1 0] 0 7]")
+    (cell (n! "[0 6]") (cell (atom 9) (cell (atom 2) wSubRebuild))))
+
+/-- The loop core `[wSubBat [a b]]`. -/
+def wSubCore (a b : Nat) : Noun := cell wSubBat (cell (atom a) (atom b))
+
+/-- On a pair `[a b]`: push the battery, fire.  `[8 [1 wSubBat] 9 2 0 1]` -/
+def wSubLoop : Noun :=
+  cell (atom 8) (cell (cell (atom 1) wSubBat) (n! "[9 2 0 1]"))
+
+def subGuarded : Noun := guardPair wSubLoop
+
 /-- Nock formulas, transcribed verbatim from the paper's Tables A and B. -/
 def phi : Word → Noun
   | .dup  => cell (cell (atom 0) (atom 2)) (cell (atom 0) (atom 1))
@@ -132,6 +208,10 @@ def phi : Word → Noun
       -- [[3 0 2] 0 3]        ( a — ? )
   | .dec  => liftUnary decGuarded
       -- [[7 [0 2] <guarded-dec>] 0 3]   ( a — a-1 )
+  | .add  => liftBinary addGuarded
+      -- [[7 [[0 6] 0 2] <guarded-inc-loop>] 0 7]   ( a b — a+b )
+  | .sub  => liftBinary subGuarded
+      -- [[7 [[0 6] 0 2] <guarded-dec-loop>] 0 7]   ( a b — a-b )
 
 /-- The shallow C model.  Total over **all** nouns; the `.exit` cases are the
     ⊥-domain column of the paper's tables, stated over arbitrary nouns rather
@@ -169,6 +249,18 @@ def cw : Word → Noun → Outcome
   | .dec,  cell (atom 0) _     => .exit                    -- underflow
   | .dec,  cell (cell _ _) _   => .exit                    -- cell argument
   | .dec,  cell (atom (n+1)) r => .val (cell (atom n) r)
+  -- Table C rows for `add` and `sub`, on `[b [a r]]` (b on top).
+  | .add,  atom _                          => .exit    -- depth < 2
+  | .add,  cell _ (atom _)                 => .exit    -- depth < 2
+  | .add,  cell (cell _ _) (cell _ _)      => .exit    -- b is a cell
+  | .add,  cell (atom _) (cell (cell _ _) _) => .exit  -- a is a cell
+  | .add,  cell (atom b) (cell (atom a) r) => .val (cell (atom (a + b)) r)
+  | .sub,  atom _                          => .exit    -- depth < 2
+  | .sub,  cell _ (atom _)                 => .exit    -- depth < 2
+  | .sub,  cell (cell _ _) (cell _ _)      => .exit    -- b is a cell
+  | .sub,  cell (atom _) (cell (cell _ _) _) => .exit  -- a is a cell
+  | .sub,  cell (atom b) (cell (atom a) r) =>
+      if b ≤ a then .val (cell (atom (a - b)) r) else .exit   -- b > a crashes
 
 -- ---------------------------------------------------------------------------
 -- Leaf contracts: one per word.  Each is a *single* statement carrying the
@@ -350,7 +442,7 @@ private theorem countUp_loop (b n : Nat) (hb : b < n) :
 
 /-- `<count-up>` is correct — on a **bare atom**.  (On a stack subject it
     diverges; that is the Reading-B refutation in TABLE-REPORT.md §C.3.) -/
-private theorem countUp_correct (n : Nat) :
+theorem countUp_correct (n : Nat) :
     NockEval (atom (n + 1)) countUp (.val (atom n)) := by
   rw [countUp_parts]
   refine NockEval.op8 NockEval.op1 ?_
@@ -419,6 +511,382 @@ private theorem leaf_dec (S : Noun) : NockEval S (phi .dec) (cw .dec S) := by
           (NockEval.op7 (NockEval.op0 (fasO_head _ _)) (decg_succ n))
           (NockEval.op0 (fasO_tail _ _))
 
+-- ── The canonical <count-up>, unguarded: divergence at 0 and on a cell ─────
+
+private theorem no_val_exit {s f v} (hv : NockEval s f (.val v))
+    (he : NockEval s f .exit) : False := by
+  have := NockEval.deterministic hv he; simp at this
+
+private theorem det_val {s f} {u v : Noun} (h1 : NockEval s f (.val u))
+    (h2 : NockEval s f (.val v)) : u = v := by
+  have := NockEval.deterministic h1 h2; simpa using this
+
+/-- If the loop test never succeeds, no derivation reaches the loop battery or
+    its else-arm.  Generalized over the counter and over the two formulas the
+    recursion alternates between (the DecDiverges pattern). -/
+private theorem countUp_loop_aux (a : Noun)
+    (hne : ∀ j : Nat, tisN a (atom (1 + j)) = atom 1) :
+    ∀ {s f : Noun} {o : Outcome}, NockEval s f o →
+      ∀ k : Nat, s = countUpCore k a → (f = countUpBat ∨ f = cuElse) → False := by
+  intro s f o h
+  induction h with
+  | @crash_malformed _ ff hm =>
+    intro _ _ hf
+    rcases hf with rfl | rfl <;> exact absurd hm (by decide)
+  | @op6_then _ bb c d oo h1 _ _ _ =>
+    intro k hs hf
+    rcases hf with hf | hf
+    · simp only [countUpBat_parts, Noun.cell.injEq] at hf
+      obtain ⟨-, hb, -, -⟩ := hf
+      subst hb; subst hs
+      have canon := cu_cond k a
+      rw [hne k] at canon
+      have := NockEval.deterministic h1 canon; simp at this
+    · simp [cuElse] at hf
+  | @op6_else _ bb c d oo _ _ _ ih2 =>
+    intro k hs hf
+    rcases hf with hf | hf
+    · simp only [countUpBat_parts, Noun.cell.injEq] at hf
+      obtain ⟨-, -, -, hd⟩ := hf
+      subst hd
+      exact ih2 k hs (Or.inr rfl)
+    · simp [cuElse] at hf
+  | @op6_nonloob _ bb c d r h1 _ hne1 _ =>
+    intro k hs hf
+    rcases hf with hf | hf
+    · simp only [countUpBat_parts, Noun.cell.injEq] at hf
+      obtain ⟨-, hb, -, -⟩ := hf
+      subst hb; subst hs
+      have canon := cu_cond k a
+      rw [hne k] at canon
+      exact hne1 (det_val h1 canon)
+    · simp [cuElse] at hf
+  | @op6_crash _ bb c d h1 _ =>
+    intro k hs hf
+    rcases hf with hf | hf
+    · simp only [countUpBat_parts, Noun.cell.injEq] at hf
+      obtain ⟨-, hb, -, -⟩ := hf
+      subst hb; subst hs
+      exact no_val_exit (cu_cond k a) h1
+    · simp [cuElse] at hf
+  | @op9 _ bax c core arm oo h1 h2 _ _ ih3 =>
+    intro k hs hf
+    rcases hf with hf | hf
+    · simp [countUpBat_parts] at hf
+    · simp only [cuElse, Noun.cell.injEq] at hf
+      obtain ⟨-, hbax, hc⟩ := hf
+      subst hbax; subst hc; subst hs
+      have hcore : core = countUpCore (k + 1) a := det_val h1 (cu_rebuild k a)
+      subst hcore
+      rw [show fasO (atom 2) (countUpCore (k + 1) a) = some countUpBat from
+        fasO_head _ _] at h2
+      have harm : arm = countUpBat := by simpa using h2.symm
+      subst harm
+      exact ih3 (k + 1) rfl (Or.inl rfl)
+  | @op9_badaxis _ bax c core h1 h2 _ =>
+    intro k hs hf
+    rcases hf with hf | hf
+    · simp [countUpBat_parts] at hf
+    · simp only [cuElse, Noun.cell.injEq] at hf
+      obtain ⟨-, hbax, hc⟩ := hf
+      subst hbax; subst hc; subst hs
+      have hcore : core = countUpCore (k + 1) a := det_val h1 (cu_rebuild k a)
+      subst hcore
+      rw [show fasO (atom 2) (countUpCore (k + 1) a) = some countUpBat from
+        fasO_head _ _] at h2
+      simp at h2
+  | @op9_crash _ bax c h1 _ =>
+    intro k hs hf
+    rcases hf with hf | hf
+    · simp [countUpBat_parts] at hf
+    · simp only [cuElse, Noun.cell.injEq] at hf
+      obtain ⟨-, -, hc⟩ := hf
+      subst hc; subst hs
+      exact no_val_exit (cu_rebuild k a) h1
+  | _ =>
+    intro _ _ hf
+    rcases hf with hf | hf <;> simp [countUpBat_parts, cuElse] at hf
+
+/-- The count-up loop, from any counter, never terminates when its test can
+    never succeed. -/
+theorem countUp_loop_diverges (k : Nat) (a : Noun)
+    (hne : ∀ j : Nat, tisN a (atom (1 + j)) = atom 1) :
+    Diverges (countUpCore k a) countUpBat :=
+  fun _ h => countUp_loop_aux a hne h k rfl (Or.inl rfl)
+
+/-- `<count-up>` diverges on any argument its test can never match. -/
+theorem countUp_diverges (a : Noun)
+    (hne : ∀ j : Nat, tisN a (atom (1 + j)) = atom 1) :
+    Diverges a countUp := by
+  intro o h
+  rw [countUp_parts] at h
+  have h0 : NockEval a (cell (atom 1) (atom 0)) (.val (atom 0)) := NockEval.op1
+  cases h with
+  | crash_malformed hm => exact absurd hm (by decide)
+  | op8_crash hb => exact no_val_exit h0 hb
+  | @op8 _ _ _ r1 _ hb hrest =>
+    have hr1 : r1 = atom 0 := det_val hb h0
+    subst hr1
+    have h1 : NockEval (cell (atom 0) a) (cell (atom 1) countUpBat) (.val countUpBat) :=
+      NockEval.op1
+    cases hrest with
+    | crash_malformed hm => exact absurd hm (by decide)
+    | op8_crash hb2 => exact no_val_exit h1 hb2
+    | @op8 _ _ _ r2 _ hb2 hfire =>
+      have hr2 : r2 = countUpBat := det_val hb2 h1
+      subst hr2
+      have hfire' : NockEval (countUpCore 0 a)
+          (cell (atom 9) (cell (atom 2) (cell (atom 0) (atom 1)))) o := hfire
+      cases hfire' with
+      | crash_malformed hm => exact absurd hm (by decide)
+      | op9_crash hc => exact no_val_exit (NockEval.op0 (fasO_one _)) hc
+      | @op9_badaxis _ _ _ core hc hnone =>
+        have hcore : core = countUpCore 0 a := det_val hc (NockEval.op0 (fasO_one _))
+        subst hcore
+        rw [show fasO (atom 2) (countUpCore 0 a) = some countUpBat from
+          fasO_head _ _] at hnone
+        simp at hnone
+      | @op9 _ _ _ core arm _ hc harm hloop =>
+        have hcore : core = countUpCore 0 a := det_val hc (NockEval.op0 (fasO_one _))
+        subst hcore
+        rw [show fasO (atom 2) (countUpCore 0 a) = some countUpBat from
+          fasO_head _ _] at harm
+        have harm' : arm = countUpBat := by simpa using harm.symm
+        subst harm'
+        exact countUp_loop_diverges 0 a hne o hloop
+
+/-- **The printed `dec` diverges at `0`.**  The counter starts at 0 and the
+    test compares the argument with `counter + 1`, which is never 0. -/
+theorem countUp_zero_diverges : Diverges (atom 0) countUp :=
+  countUp_diverges (atom 0) (fun j =>
+    tisN_neq _ _ (fun hc => by injection hc with hc; omega))
+
+/-- **The printed `dec` diverges on a cell.**  A cell never equals an atom. -/
+theorem countUp_cell_diverges (x y : Noun) : Diverges (cell x y) countUp :=
+  countUp_diverges (cell x y) (fun j => tisN_cell_atom x y (1 + j))
+
+-- ── Class C: `add` and `sub` ───────────────────────────────────────────────
+
+/-- On a stack `[b [a r]]`, `[[0 6] 0 2]` builds the pair `[a b]`. -/
+private theorem pair_eval (b a r : Noun) :
+    NockEval (cell b (cell a r))
+      (cell (cell (atom 0) (atom 6)) (cell (atom 0) (atom 2))) (.val (cell a b)) :=
+  NockEval.autocons (NockEval.op0 (fasO_six b a r)) (NockEval.op0 (fasO_head b (cell a r)))
+
+private theorem liftBinary_val {g b a r v : Noun} (h : NockEval (cell a b) g (.val v)) :
+    NockEval (cell b (cell a r)) (liftBinary g) (.val (cell v r)) :=
+  NockEval.autocons (NockEval.op7 (pair_eval b a r) h) (NockEval.op0 (fasO_seven b a r))
+
+private theorem liftBinary_exit {g b a r : Noun} (h : NockEval (cell a b) g .exit) :
+    NockEval (cell b (cell a r)) (liftBinary g) .exit :=
+  NockEval.autocons_crashL (NockEval.op7 (pair_eval b a r) h)
+
+private theorem liftBinary_atom (g : Noun) (n : Nat) :
+    NockEval (atom n) (liftBinary g) .exit :=
+  NockEval.autocons_crashL (NockEval.op7_crash
+    (NockEval.autocons_crashL (NockEval.op0_crash (fasO_six_atom n))))
+
+private theorem liftBinary_shallow (g b : Noun) (m : Nat) :
+    NockEval (cell b (atom m)) (liftBinary g) .exit :=
+  NockEval.autocons_crashL (NockEval.op7_crash
+    (NockEval.autocons_crashL (NockEval.op0_crash (fasO_six_atomtail b m))))
+
+/-- `[3 0 ax]` on a subject whose axis `ax` holds `v`. -/
+private theorem cellq_eval {S v : Noun} {ax : Nat} (h : fasO (atom ax) S = some v) :
+    NockEval S (cell (atom 3) (cell (atom 0) (atom ax))) (.val (wut v)) :=
+  NockEval.op3 (NockEval.op0 h)
+
+/-- The guard's first test fires: the left operand is a cell. -/
+private theorem guardPair_cellL (x y b k : Noun) :
+    NockEval (cell (cell x y) b) (guardPair k) .exit := by
+  have h := cellq_eval (ax := 2) (fasO_head (cell x y) b)
+  rw [wut_cell] at h
+  exact NockEval.op6_then h (NockEval.op0_crash (fasO_zero _))
+
+/-- The guard's second test fires: the right operand is a cell. -/
+private theorem guardPair_cellR (m : Nat) (x y k : Noun) :
+    NockEval (cell (atom m) (cell x y)) (guardPair k) .exit := by
+  have h1 := cellq_eval (ax := 2) (fasO_head (atom m) (cell x y))
+  rw [wut_atom] at h1
+  have h2 := cellq_eval (ax := 3) (fasO_tail (atom m) (cell x y))
+  rw [wut_cell] at h2
+  exact NockEval.op6_else h1 (NockEval.op6_then h2 (NockEval.op0_crash (fasO_zero _)))
+
+/-- Both operands are atoms: the guard passes control to `k`, outcome intact. -/
+private theorem guardPair_pass {m n : Nat} {k : Noun} {o : Outcome}
+    (h : NockEval (cell (atom m) (atom n)) k o) :
+    NockEval (cell (atom m) (atom n)) (guardPair k) o := by
+  have h1 := cellq_eval (ax := 2) (fasO_head (atom m) (atom n))
+  rw [wut_atom] at h1
+  have h2 := cellq_eval (ax := 3) (fasO_tail (atom m) (atom n))
+  rw [wut_atom] at h2
+  exact NockEval.op6_else h1 (NockEval.op6_else h2 h)
+
+-- `add`: the inc-loop
+
+private theorem wAdd_slot14 (c acc b : Nat) :
+    fasO (atom 14) (wAddCore c acc b) = some (atom acc) := by simp [wAddCore, fasO]
+
+private theorem wAdd_slot15 (c acc b : Nat) :
+    fasO (atom 15) (wAddCore c acc b) = some (atom b) := by simp [wAddCore, fasO]
+
+private theorem wAddBat_parts :
+    wAddBat = cell (atom 6) (cell (n! "[5 [0 6] 0 15]") (cell (n! "[0 14]")
+      (cell (atom 9) (cell (atom 2) (n! "[[0 2] [4 0 6] [4 0 14] 0 15]"))))) := rfl
+
+private theorem wAdd_rebuild (c acc b : Nat) :
+    NockEval (wAddCore c acc b) (n! "[[0 2] [4 0 6] [4 0 14] 0 15]")
+      (.val (wAddCore (c + 1) (acc + 1) b)) := by
+  have h : NockEval (wAddCore c acc b) (n! "[[0 2] [4 0 6] [4 0 14] 0 15]")
+      (.val (cell wAddBat (cell (atom (1 + c)) (cell (atom (1 + acc)) (atom b))))) :=
+    NockEval.autocons (NockEval.op0 (fasO_head _ _))
+      (NockEval.autocons
+        (NockEval.op4 (NockEval.op0 (fasO_six _ _ _)) (lusO_atom c))
+        (NockEval.autocons
+          (NockEval.op4 (NockEval.op0 (wAdd_slot14 c acc b)) (lusO_atom acc))
+          (NockEval.op0 (wAdd_slot15 c acc b))))
+  simpa [wAddCore, Nat.add_comm] using h
+
+/-- Loop invariant: with `d` iterations to go, the loop adds `d`. -/
+private theorem wAdd_loop (d : Nat) : ∀ c acc b : Nat, b = c + d →
+    NockEval (wAddCore c acc b) wAddBat (.val (atom (acc + d))) := by
+  induction d with
+  | zero =>
+    intro c acc b hb
+    simp only [Nat.add_zero] at hb ⊢
+    rw [hb, wAddBat_parts]
+    have hcond : NockEval (wAddCore c acc c) (n! "[5 [0 6] 0 15]") (.val (atom 0)) := by
+      have h := NockEval.op5 (NockEval.op0 (fasO_six wAddBat (atom c) (cell (atom acc) (atom c))))
+        (NockEval.op0 (wAdd_slot15 c acc c))
+      rwa [tisN_refl] at h
+    exact NockEval.op6_then hcond (NockEval.op0 (wAdd_slot14 c acc c))
+  | succ d ih =>
+    intro c acc b hb
+    rw [wAddBat_parts]
+    have hcond : NockEval (wAddCore c acc b) (n! "[5 [0 6] 0 15]") (.val (atom 1)) := by
+      have h := NockEval.op5 (NockEval.op0 (fasO_six wAddBat (atom c) (cell (atom acc) (atom b))))
+        (NockEval.op0 (wAdd_slot15 c acc b))
+      rwa [tisN_neq _ _ (fun hc => by injection hc with hc; omega)] at h
+    refine NockEval.op6_else hcond ?_
+    refine NockEval.op9 (wAdd_rebuild c acc b) (fasO_head _ _) ?_
+    have := ih (c + 1) (acc + 1) b (by omega)
+    rwa [show acc + 1 + d = acc + (d + 1) from by omega] at this
+
+/-- The guarded inc-loop computes `a + b` on a pair of atoms. -/
+private theorem addGuarded_atoms (a b : Nat) :
+    NockEval (cell (atom a) (atom b)) addGuarded (.val (atom (a + b))) := by
+  refine guardPair_pass ?_
+  refine NockEval.op8 NockEval.op1 (NockEval.op8 NockEval.op1 ?_)
+  show NockEval (wAddCore 0 a b)
+    (cell (atom 9) (cell (atom 2) (cell (atom 0) (atom 1)))) (.val (atom (a + b)))
+  exact NockEval.op9 (NockEval.op0 (fasO_one _)) (fasO_head _ _)
+    (wAdd_loop b 0 a b (by omega))
+
+/-- **Table C's `add` row, discharged by the kernel.** -/
+private theorem leaf_add (S : Noun) : NockEval S (phi .add) (cw .add S) := by
+  cases S with
+  | atom n => exact liftBinary_atom _ n
+  | cell b t =>
+    cases t with
+    | atom m => exact liftBinary_shallow _ b m
+    | cell a r =>
+      cases b with
+      | cell bx byy =>
+        cases a with
+        | cell x y => exact liftBinary_exit (guardPair_cellL x y _ _)
+        | atom m   => exact liftBinary_exit (guardPair_cellR m bx byy _)
+      | atom nb =>
+        cases a with
+        | cell x y => exact liftBinary_exit (guardPair_cellL x y _ _)
+        | atom na  => exact liftBinary_val (addGuarded_atoms na nb)
+
+-- `sub`: the dec-loop, over the guarded `dec`
+
+private theorem wSubBat_parts :
+    wSubBat = cell (atom 6) (cell (n! "[5 [1 0] 0 7]")
+      (cell (n! "[0 6]") (cell (atom 9) (cell (atom 2) wSubRebuild)))) := rfl
+
+/-- Loop invariant: the dec-loop computes `a - b` when `b ≤ a`, and crashes
+    (through the guarded `dec` at 0) when `b > a`. -/
+private theorem wSub_loop (b : Nat) : ∀ a : Nat,
+    NockEval (wSubCore a b) wSubBat
+      (if b ≤ a then .val (atom (a - b)) else .exit) := by
+  induction b with
+  | zero =>
+    intro a
+    rw [if_pos (Nat.zero_le a), Nat.sub_zero, wSubBat_parts]
+    have hcond : NockEval (wSubCore a 0) (n! "[5 [1 0] 0 7]") (.val (atom 0)) := by
+      have h := NockEval.op5 (a := wSubCore a 0) (NockEval.op1 (fol := atom 0))
+        (NockEval.op0 (fasO_seven wSubBat (atom a) (atom 0)))
+      rwa [tisN_refl] at h
+    exact NockEval.op6_then hcond (NockEval.op0 (fasO_six _ _ _))
+  | succ k ih =>
+    intro a
+    rw [wSubBat_parts]
+    have hcond : NockEval (wSubCore a (k + 1)) (n! "[5 [1 0] 0 7]") (.val (atom 1)) := by
+      have h := NockEval.op5 (a := wSubCore a (k + 1)) (NockEval.op1 (fol := atom 0))
+        (NockEval.op0 (fasO_seven wSubBat (atom a) (atom (k + 1))))
+      rwa [tisN_neq _ _ (fun hc => by injection hc with hc; omega)] at h
+    refine NockEval.op6_else hcond ?_
+    cases a with
+    | zero =>
+      rw [if_neg (by omega)]
+      refine NockEval.op9_crash ?_
+      exact NockEval.autocons_crashR (NockEval.op0 (fasO_head _ _))
+        (NockEval.autocons_crashL
+          (NockEval.op7 (NockEval.op0 (fasO_six _ _ _)) decg_zero))
+    | succ m =>
+      have hre : NockEval (wSubCore (m + 1) (k + 1)) wSubRebuild (.val (wSubCore m k)) :=
+        NockEval.autocons (NockEval.op0 (fasO_head _ _))
+          (NockEval.autocons
+            (NockEval.op7 (NockEval.op0 (fasO_six _ _ _)) (decg_succ m))
+            (NockEval.op7 (NockEval.op0 (fasO_seven _ _ _)) (decg_succ k)))
+      refine NockEval.op9 hre (fasO_head _ _) ?_
+      have hk := ih m
+      rcases Nat.lt_or_ge m k with hlt | hge
+      · rw [if_neg (by omega)] at hk
+        rw [if_neg (by omega)]
+        exact hk
+      · rw [if_pos hge] at hk
+        rw [if_pos (by omega), show m + 1 - (k + 1) = m - k from by omega]
+        exact hk
+
+/-- The guarded dec-loop on a pair of atoms. -/
+private theorem subGuarded_atoms (a b : Nat) :
+    NockEval (cell (atom a) (atom b)) subGuarded
+      (if b ≤ a then .val (atom (a - b)) else .exit) := by
+  refine guardPair_pass ?_
+  refine NockEval.op8 NockEval.op1 ?_
+  show NockEval (wSubCore a b)
+    (cell (atom 9) (cell (atom 2) (cell (atom 0) (atom 1)))) _
+  exact NockEval.op9 (NockEval.op0 (fasO_one _)) (fasO_head _ _) (wSub_loop b a)
+
+/-- **Table C's `sub` row, discharged by the kernel.** -/
+private theorem leaf_sub (S : Noun) : NockEval S (phi .sub) (cw .sub S) := by
+  cases S with
+  | atom n => exact liftBinary_atom _ n
+  | cell b t =>
+    cases t with
+    | atom m => exact liftBinary_shallow _ b m
+    | cell a r =>
+      cases b with
+      | cell bx byy =>
+        cases a with
+        | cell x y => exact liftBinary_exit (guardPair_cellL x y _ _)
+        | atom m   => exact liftBinary_exit (guardPair_cellR m bx byy _)
+      | atom nb =>
+        cases a with
+        | cell x y => exact liftBinary_exit (guardPair_cellL x y _ _)
+        | atom na  =>
+          have h := subGuarded_atoms na nb
+          show NockEval (cell (atom nb) (cell (atom na) r)) (phi .sub)
+            (if nb ≤ na then .val (cell (atom (na - nb)) r) else .exit)
+          rcases Nat.lt_or_ge na nb with hlt | hge
+          · rw [if_neg (by omega)] at h ⊢
+            exact liftBinary_exit h
+          · rw [if_pos hge] at h ⊢
+            exact liftBinary_val h
+
 /-- **Leaf correctness.**  For every word and every subject noun, the compiled
     Nock formula evaluates to exactly the outcome the C model specifies —
     value where the model returns, crash where the model crashes. -/
@@ -435,6 +903,8 @@ theorem leaf_correct (w : Word) (S : Noun) : NockEval S (phi w) (cw w S) := by
   · exact leaf_eq S
   · exact leaf_celq S
   · exact leaf_dec S
+  · exact leaf_add S
+  · exact leaf_sub S
 
 -- ---------------------------------------------------------------------------
 -- The two compilers and the composition theorem
