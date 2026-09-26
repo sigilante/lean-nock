@@ -16,6 +16,7 @@ import Nock.Gate
 import Nock.Rec
 import Nock.GateRec
 import Nock.Mock
+import Nock.Order
 
 /-!
 # The audit manifest — build-enforced
@@ -148,3 +149,8 @@ open Nock.Audit
 #audit_clean three_valued_sound three_valued_mock
 #audit_clean natDec_twoValued natDec_not_threeValued two_valued_unsound
 #audit_clean word_jet_sound
+
+-- Evaluation order, pinned to Vere and NockVM (opcode 10: tree before patch)
+#audit_clean order_autocons_diverges order_autocons_crashes
+#audit_clean order_op2_diverges order_op2_crashes order_op5_diverges order_op5_crashes
+#audit_clean order_op10_diverges order_op10_crashes order_op11_diverges order_op11_crashes

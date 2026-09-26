@@ -123,14 +123,15 @@ def nockF : Nat → Noun → Noun → Option Outcome
     | 9, _ => some .exit
     -- *[a 10 [b c] d] = #[b *[a c] *[a d]]
     | 10, cell (cell b c) d =>
-      match nockF fuel a c with
+      -- tree first, then patch (Vere and NockVM)
+      match nockF fuel a d with
       | none           => none
       | some .exit     => some .exit
-      | some (.val r1) =>
-        match nockF fuel a d with
+      | some (.val r2) =>
+        match nockF fuel a c with
         | none           => none
         | some .exit     => some .exit
-        | some (.val r2) =>
+        | some (.val r1) =>
           match haxO b r1 r2 with
           | some v => some (.val v)
           | none   => some .exit
@@ -313,14 +314,14 @@ theorem nockF_sound : ∀ (k : Nat) {a f o}, nockF k a f = some o → NockEval a
       next h1 => simp at h
       next h1 =>
         simp only [Option.some.injEq] at h; subst h
-        exact .op10_crashL (ih h1)
-      next r1 h1 =>
+        exact .op10_crashTree (ih h1)
+      next r2 h1 =>
         split at h
         next h2 => simp at h
         next h2 =>
           simp only [Option.some.injEq] at h; subst h
-          exact .op10_crashR (ih h1) (ih h2)
-        next r2 h2 =>
+          exact .op10_crashPatch (ih h1) (ih h2)
+        next r1 h2 =>
           split at h
           next v hv => simp only [Option.some.injEq] at h; subst h; exact .op10 (ih h1) (ih h2) hv
           next hv =>
@@ -629,9 +630,9 @@ theorem nockF_complete {a f o} (h : NockEval a f o) : ∃ k, nockF k a f = some 
     have e1 := nockF_mono hk1 (show k1 ≤ max k1 k2 by omega)
     have e2 := nockF_mono hk2 (show k2 ≤ max k1 k2 by omega)
     exact ⟨max k1 k2 + 1, by simp only [nockF, e1, e2, hv]⟩
-  | op10_crashL _ ih1 =>
+  | op10_crashTree _ ih1 =>
     obtain ⟨k1, hk1⟩ := ih1; exact ⟨k1 + 1, by simp only [nockF, hk1]⟩
-  | op10_crashR _ _ ih1 ih2 =>
+  | op10_crashPatch _ _ ih1 ih2 =>
     obtain ⟨k1, hk1⟩ := ih1; obtain ⟨k2, hk2⟩ := ih2
     have e1 := nockF_mono hk1 (show k1 ≤ max k1 k2 by omega)
     have e2 := nockF_mono hk2 (show k2 ≤ max k1 k2 by omega)
@@ -656,9 +657,9 @@ theorem nockF_complete {a f o} (h : NockEval a f o) : ∃ k, nockF k a f = some 
     Note the route.  Rather than a double induction on the two derivations
     with constructor-disjointness case analysis, we push both through the
     *function* `nockF` at a common fuel.  A function has one value, so the
-    two outcomes coincide.  Left-to-right strictness in the crash-propagation
-    constructors is what makes this true: a "right crashes first" variant
-    anywhere would give `[0 0]`-style formulas two derivations. -/
+    two outcomes coincide.  A single fixed evaluation order in the
+    crash-propagation constructors is what makes this true: a symmetric
+    variant anywhere would give `[0 0]`-style formulas two derivations. -/
 theorem NockEval.deterministic {a f o₁ o₂}
     (h₁ : NockEval a f o₁) (h₂ : NockEval a f o₂) : o₁ = o₂ := by
   obtain ⟨k₁, hk₁⟩ := nockF_complete h₁

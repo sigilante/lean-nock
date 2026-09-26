@@ -27,10 +27,14 @@ primitives of `Nock.Basic` plus `Outcome.exit` close that hole.
 
 ## Evaluation order
 
-Evaluation is **left-to-right and strict**, matching Vere and NockVM: a
-crash in an earlier operand hides later operands.  This is what makes the
-relation deterministic.  The crash-propagation constructors below encode
-exactly that order; there are deliberately no symmetric variants.
+Evaluation is **strict, in the order of Vere and NockVM**: left to right,
+except that opcode 10 evaluates its tree `d` before its patch `c`.  A crash in
+an earlier operand hides later operands, and so does a divergence.  The Nock
+specification leaves this order open; it decides which bottom a formula
+reaches when one operand crashes and another diverges (see `Nock.Order`).
+The crash-propagation constructors below encode exactly this order; there are
+deliberately no symmetric variants, which is what makes the relation
+deterministic.
 
 Tail-position subcomputations pass their `Outcome` through unchanged (the
 `o` parameter).  Only an intermediate result that the rule itself consumes
@@ -207,23 +211,24 @@ inductive NockEval : Noun → Noun → Outcome → Prop where
       NockEval a c .exit →
       NockEval a (cell (atom 9) (cell b c)) .exit
 
-  -- *[a 10 [b c] d] = #[b *[a c] *[a d]]  (edit-at-axis; evaluate c, then d)
+  -- *[a 10 [b c] d] = #[b *[a c] *[a d]]  (edit-at-axis)
+  -- Evaluate the tree d first, then the patch c — the order of Vere and NockVM.
   | op10 {a b c d r1 r2 v} :
-      NockEval a c (.val r1) →
       NockEval a d (.val r2) →
+      NockEval a c (.val r1) →
       haxO b r1 r2 = some v →
       NockEval a (cell (atom 10) (cell (cell b c) d)) (.val v)
   | op10_badaxis {a b c d r1 r2} :
-      NockEval a c (.val r1) →
       NockEval a d (.val r2) →
+      NockEval a c (.val r1) →
       haxO b r1 r2 = none →
       NockEval a (cell (atom 10) (cell (cell b c) d)) .exit
-  | op10_crashL {a b c d} :
-      NockEval a c .exit →
-      NockEval a (cell (atom 10) (cell (cell b c) d)) .exit
-  | op10_crashR {a b c d r1} :
-      NockEval a c (.val r1) →
+  | op10_crashTree {a b c d} :
       NockEval a d .exit →
+      NockEval a (cell (atom 10) (cell (cell b c) d)) .exit
+  | op10_crashPatch {a b c d r2} :
+      NockEval a d (.val r2) →
+      NockEval a c .exit →
       NockEval a (cell (atom 10) (cell (cell b c) d)) .exit
 
   -- *[a 11 t c] = *[a c]                (static hint: atom tag, no-op)
@@ -261,8 +266,7 @@ example (bat sam ctx arg : Noun) :
     NockEval (cell bat (cell sam ctx))
              (cell (atom 10) (cell (cell (atom 6) (cell (atom 1) arg)) (cell (atom 0) (atom 1))))
              (.val (cell bat (cell arg ctx))) :=
-  NockEval.op10 NockEval.op1
-    (NockEval.op0 (fasO_one _))
+  NockEval.op10 (NockEval.op0 (fasO_one _)) NockEval.op1
     (haxO_six arg bat sam ctx)
 
 -- ---------------------------------------------------------------------------

@@ -23,6 +23,7 @@ import Nock.Gate
 import Nock.Rec
 import Nock.GateRec
 import Nock.Mock
+import Nock.Order
 import Nock.Notation
 -- The audit manifest FAILS THE BUILD on axiom-footprint drift, on `sorry`,
 -- and on any rename/deletion of a name the manuscript cites.  Keep it last.

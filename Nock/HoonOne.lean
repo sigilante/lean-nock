@@ -51,7 +51,7 @@ theorem callGate_gate_eval (bat sam ctx arg : Noun) {o : Outcome}
   simp only [C]
   -- op9: evaluate [10 [6 [1 arg]] [0 1]] to the edited core, then run arm 2
   refine NockEval.op9 ?_ (fasO_head bat (cell arg ctx)) h
-  exact NockEval.op10 NockEval.op1 (NockEval.op0 (fasO_one _)) (haxO_six arg bat sam ctx)
+  exact NockEval.op10 (NockEval.op0 (fasO_one _)) NockEval.op1 (haxO_six arg bat sam ctx)
 
 /-! ## `++dec` correctness proof
 
@@ -134,8 +134,8 @@ private theorem dec_edit_core (b n : Nat) (ctx : Noun) :
                             (cell (atom 0) (atom 1))))
       (.val (decLoopCore (b + 1) n ctx)) := by
   refine NockEval.op10
-    (NockEval.op4 (dec_slot6_eval b n ctx) (lusO_atom b))
-    (NockEval.op0 (fasO_one _)) ?_
+    (NockEval.op0 (fasO_one _))
+    (NockEval.op4 (dec_slot6_eval b n ctx) (lusO_atom b)) ?_
   show haxO (atom 6) (atom (1 + b)) (decLoopCore b n ctx) = some (decLoopCore (b + 1) n ctx)
   simp [decLoopCore, haxO_six, Nat.add_comm]
 
@@ -325,8 +325,8 @@ theorem add_loop_inv (a b : Nat) (ctx : Noun) (hctx : AddCtx ctx) :
         have dec_a : NockEval (addLoopCore (a + 1) b ctx) addDecCallF (.val (atom a)) := by
           have h := hctx.dec_call (a + 1) b (by omega); simpa using h
         refine NockEval.op10
-          (NockEval.autocons dec_a (NockEval.op4 slot13 (lusO_atom b)))
-          (NockEval.op0 (fasO_one _)) ?_
+          (NockEval.op0 (fasO_one _))
+          (NockEval.autocons dec_a (NockEval.op4 slot13 (lusO_atom b))) ?_
         show haxO (atom 6) (cell (atom a) (atom (1 + b))) (addLoopCore (a + 1) b ctx)
           = some (addLoopCore a (1 + b) ctx)
         simp [addLoopCore, haxO_six]
@@ -455,7 +455,7 @@ theorem sub_loop_inv (a b : Nat) (ctx : Noun) (hctx : SubCtx ctx) (hab : b ≤ a
         have dec_b := hctx.dec_call_b a (b + 1) (by omega)
         rw [show (b + 1) - 1 = b from by omega] at dec_b
         refine NockEval.op10
-          (NockEval.autocons dec_a dec_b) (NockEval.op0 (fasO_one _)) ?_
+          (NockEval.op0 (fasO_one _)) (NockEval.autocons dec_a dec_b) ?_
         show haxO (atom 6) (cell (atom (a - 1)) (atom b)) (subLoopCore a (b + 1) ctx)
           = some (subLoopCore (a - 1) b ctx)
         simp [subLoopCore, haxO_six]

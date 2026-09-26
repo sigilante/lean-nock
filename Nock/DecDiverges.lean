@@ -93,8 +93,8 @@ private theorem dec_cond_evalG (b : Nat) (sam ctx : Noun) :
 private theorem dec_edit_coreG (b : Nat) (sam ctx : Noun) :
     NockEval (decLoopCoreG b sam ctx) decEditF (.val (decLoopCoreG (b + 1) sam ctx)) := by
   refine NockEval.op10
-    (NockEval.op4 (dec_slot6_evalG b sam ctx) (lusO_atom b))
-    (NockEval.op0 (fasO_one _)) ?_
+    (NockEval.op0 (fasO_one _))
+    (NockEval.op4 (dec_slot6_evalG b sam ctx) (lusO_atom b)) ?_
   show haxO (atom 6) (atom (1 + b)) (decLoopCoreG b sam ctx)
     = some (decLoopCoreG (b + 1) sam ctx)
   simp [decLoopCoreG, haxO_six, Nat.add_comm]
