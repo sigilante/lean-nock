@@ -26,6 +26,7 @@ changes (see [Audit](#the-audit-manifest)).
 | Paper claim | Status | Where |
 | --- | --- | --- |
 | Nock 4K semantics, three-valued (value / crash / divergence) | relation + fuel interpreter, sound, complete, deterministic | `Eval.lean`, `Fuel.lean` |
+| Evaluation order, which the spec leaves open, matches Vere and NockVM | **discharged** for every multi-operand rule | `order_*` (`Order.lean`) |
 | Table A leaf contracts (`dup drop swap over cons head tail`) | **discharged**, over all nouns | `leaf_correct` |
 | Table B leaf contracts (`inc eq cel?`) | **discharged**, over all nouns | `leaf_correct` |
 | Table C: guarded `dec`, `add` (inc-loop), `sub` (dec-loop) | **discharged**, over all nouns, crash rows included | `leaf_correct` (`leaf_dec`, `leaf_add`, `leaf_sub`) |
@@ -158,6 +159,7 @@ Nock/
   Rec.lean           — Named definitions: self- and mutual recursion over a multi-armed battery
   GateRec.lean       — A program with named definitions packaged as a gate core
   Mock.lean          — +mock; the two-valued contract unsound, the three-valued contract sound
+  Order.lean         — Evaluation order pinned to Vere and NockVM (opcode 10: tree before patch)
   Audit.lean         — Build-enforced axiom manifest and API freeze list
   Notation.lean      — n! bracket-notation macro for Noun literals
   RuntimeBridge.lean — native_decide bridge;  QUARANTINED
@@ -201,9 +203,13 @@ inductive NockEval : Noun → Noun → Outcome → Prop where
 | deterministic crash, `%exit` | `Outcome.exit` |
 | diverges | *no derivation exists*: `Diverges a f := ∀ o, ¬ NockEval a f o` |
 
-Evaluation is left-to-right and strict, matching Vere and NockVM. The
-crash-propagation constructors encode that order, which is what makes the
-relation deterministic (`NockEval.deterministic`).
+Evaluation is strict, in the order of Vere and NockVM: left to right, except
+that opcode 10 evaluates its tree before its patch. The Nock specification
+leaves the order open, and it decides which bottom a formula reaches when one
+operand crashes and another diverges. The crash-propagation constructors
+encode this order, which is what makes the relation deterministic
+(`NockEval.deterministic`). `Order.lean` pins it: for each multi-operand rule,
+the first-evaluated operand's crash or divergence wins.
 
 Crashes were once represented by absence, which was unsound rather than merely
 incomplete. `panic!` reduces to `Inhabited.default = atom 0` in Lean's logic,

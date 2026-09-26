@@ -33,16 +33,23 @@ chain, and lean-nock must not take a Mathlib dependency.
 1. Build lean-nock under `leanprover/lean4:v4.31.0`. The bridge package will
    compile lean-nock with its own toolchain. Fix any breakage on a branch;
    bump lean-nock's pin only if the fixes are trivial.
-2. **Evaluation-order probe.** pure-nock-lean's semantics is a small-step
-   machine (`Nock.Verb.next`, with `getIndex = maxPendingIdx`). lean-nock is
-   left-to-right strict, matching Vere and NockVM. If pure-nock-lean reduces
-   the rightmost pending redex first, the two disagree on crash vs.
-   divergence. Witness: subject `0`, the autocons formula `[L [0 0]]` with
-   `L` a diverging loop (e.g. `countUp`). lean-nock diverges, because the
-   left operand never finishes; a right-first machine crashes on `[0 0]`.
-   Run `evalProgram n (atom 0) ⌜[L [0 0]]⌝` for growing `n`. If this is a
-   disagreement it is a **finding**, and it decides the shape of 9.2's
-   theorem: full agreement, or agreement off divergence.
+2. **Evaluation-order probe — DONE (2026-09-26).** Each test program races a
+   diverging operand (`countUp` on `0`) against a crashing one (`[0 0]`), per
+   rule.
+   - **Vere and NockVM** (by source reading: Vere `develop` `40a69573e9`,
+     NockVM `73877be2`) evaluate left to right, except that opcode 10
+     evaluates the tree before the patch.
+   - **lean-nock** evaluated opcode 10 patch-first. It is **fixed**: now
+     tree-first, pinned by `Order.lean`.
+   - **pure-nock-lean** (its own evaluator files, Lean 4.31) evaluates
+     autocons and opcodes 2 and 5 **right to left**, because its step
+     function picks the pending redex with the largest depth-first index. It
+     is tree-first on opcode 10, and it crashes on every opcode 11, since
+     hints are outside its paper-domain interpreter. It therefore reaches the
+     other bottom from both runtimes on crash-versus-divergence races.
+     Reported to its maintainers.
+   - **Consequence for 9.2:** a formal bridge can claim agreement only where
+     no such race occurs, or once pure-nock-lean adopts the runtime order.
 
 **9.1 Differential testing (cheap, do before any proof).**
 - Add a `lake exe export-corpus` target that writes lean-nock's compiled
