@@ -733,3 +733,166 @@ example (r : Noun) :
       (.val r) :=
     REval.ifte_then (REval.call rfl d1 REval.nil) REval.nil
   exact REval.call rfl d2 REval.nil
+
+-- ---------------------------------------------------------------------------
+-- `while` as a recursive definition
+--
+-- A loop whose body calls a definition is written as a recursive definition.
+-- This loses nothing: the encoding `W := p_t · ifte(p_b · W, ε)` has exactly
+-- the semantics of `while(p_t, p_b)` wherever the latter is defined.
+-- ---------------------------------------------------------------------------
+
+/-- `W := p_t · ifte(p_b · W, ε)`, as definition `i` of its table. -/
+def whileDef (t b : Term) (i : Nat) : RTerm :=
+  .blk t (.ifte (.blk b (.call i .nil)) .nil .nil)
+
+private theorem call_nil_iff {D : List RTerm} {i : Nat} {d : RTerm}
+    (hd : armOf D i = some d) (S : Noun) (o : Outcome) :
+    REval D (.call i .nil) S o ↔ REval D d S o := by
+  constructor
+  · intro h
+    cases h with
+    | call hl hb hk =>
+      rw [hd] at hl; cases hl
+      cases hk
+      exact hb
+    | call_crash hl hb =>
+      rw [hd] at hl; cases hl
+      exact hb
+    | call_undef hl => rw [hd] at hl; cases hl
+  · intro h
+    cases o with
+    | val S' => exact REval.call hd h REval.nil
+    | exit   => exact REval.call_crash hd h
+
+/-- The strengthened motive: one clause per shape the loop's derivation passes
+    through, so the recursion back to the call is an immediate-IH use. -/
+private theorem while_of_call_aux {t b : Term} {D : List RTerm} {i : Nat}
+    (hW : armOf D i = some (whileDef t b i)) :
+    ∀ {x : RTerm} {S : Noun} {o : Outcome}, REval D x S o →
+      (x = .call i .nil → CEval (.while t b .nil) S o) ∧
+      (x = .blk t (.ifte (.blk b (.call i .nil)) .nil .nil) →
+        CEval (.while t b .nil) S o) ∧
+      (x = .ifte (.blk b (.call i .nil)) .nil .nil →
+        ∀ S₀, CEval t S₀ (.val S) → CEval (.while t b .nil) S₀ o) ∧
+      (x = .blk b (.call i .nil) →
+        (∃ R, CEval b S (.val R) ∧ CEval (.while t b .nil) R o) ∨
+        (CEval b S .exit ∧ o = .exit)) := by
+  intro x S o h
+  induction h with
+  | nil =>
+    exact ⟨(fun e => by cases e), (fun e => by cases e), (fun e => by cases e), (fun e => by cases e)⟩
+  | @blk t' k S S' o hc hk ih =>
+    refine ⟨(fun e => by cases e), fun e => ?_, (fun e => by cases e), fun e => ?_⟩
+    · injection e with e1 e2; subst e1; subst e2
+      exact ih.2.2.1 rfl S hc
+    · injection e with e1 e2; subst e1; subst e2
+      exact Or.inl ⟨S', hc, ih.1 rfl⟩
+  | @blk_crash t' k S hc =>
+    refine ⟨(fun e => by cases e), fun e => ?_, (fun e => by cases e), fun e => ?_⟩
+    · injection e with e1 e2; subst e1
+      exact CEval.while_test_crash hc
+    · injection e with e1 e2; subst e1
+      exact Or.inr ⟨hc, rfl⟩
+  | @call i' k d S S' o hl hb hk ih₁ ih₂ =>
+    refine ⟨fun e => ?_, (fun e => by cases e), (fun e => by cases e), (fun e => by cases e)⟩
+    injection e with e1 e2; subst e1; subst e2
+    rw [hW] at hl; cases hl
+    cases hk
+    exact ih₁.2.1 rfl
+  | @call_crash i' k d S hl hb ih₁ =>
+    refine ⟨fun e => ?_, (fun e => by cases e), (fun e => by cases e), (fun e => by cases e)⟩
+    injection e with e1 e2; subst e1
+    rw [hW] at hl; cases hl
+    exact ih₁.2.1 rfl
+  | @call_undef i' k S hl =>
+    refine ⟨fun e => ?_, (fun e => by cases e), (fun e => by cases e), (fun e => by cases e)⟩
+    injection e with e1 e2; subst e1
+    rw [hW] at hl; cases hl
+  | @ifte_then q₁ q₂ k r T o hq hk ih₁ ih₂ =>
+    refine ⟨(fun e => by cases e), (fun e => by cases e), fun e => ?_, (fun e => by cases e)⟩
+    injection e with e1 e2 e3; subst e1; subst e2; subst e3
+    intro S₀ hS₀
+    cases hk
+    rcases ih₁.2.2.2 rfl with ⟨R, hbR, hR⟩ | ⟨-, he⟩
+    · exact CEval.while_step hS₀ hbR hR
+    · cases he
+  | @ifte_then_crash q₁ q₂ k r hq ih₁ =>
+    refine ⟨(fun e => by cases e), (fun e => by cases e), fun e => ?_, (fun e => by cases e)⟩
+    injection e with e1 e2 e3; subst e1
+    intro S₀ hS₀
+    rcases ih₁.2.2.2 rfl with ⟨R, hbR, hR⟩ | ⟨hbx, -⟩
+    · exact CEval.while_step hS₀ hbR hR
+    · exact CEval.while_body_crash hS₀ hbx
+  | @ifte_else q₁ q₂ k r T o hq hk ih₁ ih₂ =>
+    refine ⟨(fun e => by cases e), (fun e => by cases e), fun e => ?_, (fun e => by cases e)⟩
+    injection e with e1 e2 e3; subst e2; subst e3
+    intro S₀ hS₀
+    cases hq
+    cases hk
+    exact CEval.while_exit hS₀ CEval.nil
+  | @ifte_else_crash q₁ q₂ k r hq ih₁ =>
+    refine ⟨(fun e => by cases e), (fun e => by cases e), fun e => ?_, (fun e => by cases e)⟩
+    injection e with e1 e2 e3; subst e2
+    cases hq
+  | @ifte_nonloob q₁ q₂ k f r hne0 hne1 =>
+    refine ⟨(fun e => by cases e), (fun e => by cases e), fun e => ?_, (fun e => by cases e)⟩
+    intro S₀ hS₀
+    exact CEval.while_nonloob hS₀ hne0 hne1
+  | @ifte_atom q₁ q₂ k n =>
+    refine ⟨(fun e => by cases e), (fun e => by cases e), fun e => ?_, (fun e => by cases e)⟩
+    intro S₀ hS₀
+    exact CEval.while_flag_atom hS₀
+
+private theorem call_of_while {t b : Term} {D : List RTerm} {i : Nat}
+    (hW : armOf D i = some (whileDef t b i)) :
+    ∀ {x : Term} {S : Noun} {o : Outcome}, CEval x S o →
+      x = .while t b .nil → REval D (.call i .nil) S o := by
+  intro x S o h
+  induction h with
+  | @while_step t' b' p S S' S'' o h₁ h₂ h₃ ih₁ ih₂ ih₃ =>
+    intro e
+    injection e with e1 e2 e3; subst e1; subst e2; subst e3
+    have hrec := ih₃ rfl
+    refine (call_nil_iff hW S o).2 (REval.blk h₁ ?_)
+    cases o with
+    | val X => exact REval.ifte_then (REval.blk h₂ hrec) REval.nil
+    | exit  => exact REval.ifte_then_crash (REval.blk h₂ hrec)
+  | @while_exit t' b' p S S' o h₁ h₂ ih₁ ih₂ =>
+    intro e
+    injection e with e1 e2 e3; subst e1; subst e2; subst e3
+    cases h₂
+    exact (call_nil_iff hW S _).2 (REval.blk h₁ (REval.ifte_else REval.nil REval.nil))
+  | @while_test_crash t' b' p S h₁ ih₁ =>
+    intro e
+    injection e with e1 e2 e3; subst e1; subst e2; subst e3
+    exact (call_nil_iff hW S _).2 (REval.blk_crash h₁)
+  | @while_body_crash t' b' p S S' h₁ h₂ ih₁ ih₂ =>
+    intro e
+    injection e with e1 e2 e3; subst e1; subst e2; subst e3
+    exact (call_nil_iff hW S _).2
+      (REval.blk h₁ (REval.ifte_then_crash (REval.blk_crash h₂)))
+  | @while_flag_atom t' b' p S n h₁ ih₁ =>
+    intro e
+    injection e with e1 e2 e3; subst e1; subst e2; subst e3
+    exact (call_nil_iff hW S _).2 (REval.blk h₁ REval.ifte_atom)
+  | @while_nonloob t' b' p S f S' h₁ hne0 hne1 ih₁ =>
+    intro e
+    injection e with e1 e2 e3; subst e1; subst e2; subst e3
+    exact (call_nil_iff hW S _).2 (REval.blk h₁ (REval.ifte_nonloob hne0 hne1))
+  | _ => intro e; cases e
+
+/-- **`while` as recursion.**  Calling the definition `W := p_t · ifte(p_b · W, ε)`
+    has exactly the semantics of `while(p_t, p_b)`. -/
+theorem while_as_call (t b : Term) (D : List RTerm) (i : Nat)
+    (hW : armOf D i = some (whileDef t b i)) (S : Noun) (o : Outcome) :
+    REval D (.call i .nil) S o ↔ CEval (.while t b .nil) S o :=
+  ⟨fun h => (while_of_call_aux hW h).1 rfl, fun h => call_of_while hW h rfl⟩
+
+/-- The two compilations of a loop — the `while` schema and the recursive
+    encoding over a one-armed battery — are different Nock that agree exactly. -/
+theorem while_as_program (t b : Term) (S : Noun) (o : Outcome) :
+    NockEval S (progF [whileDef t b 0] (.call 0 .nil)) o ↔
+      NockEval S (NT (.while t b .nil)) o :=
+  (program_term _ _ S o).trans
+    ((while_as_call t b [whileDef t b 0] 0 rfl S o).trans (composition_term _ S o).symm)

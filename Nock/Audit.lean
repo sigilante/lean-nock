@@ -14,6 +14,8 @@ import Nock.Composition
 import Nock.Hint
 import Nock.Gate
 import Nock.Rec
+import Nock.GateRec
+import Nock.Mock
 
 /-!
 # The audit manifest — build-enforced
@@ -135,3 +137,14 @@ open Nock.Audit
 #audit_clean fasO_armAx reval_sound rback_fuel
 #audit_clean rcomposition rcomposition_diverges program_term program_diverges
 #audit_clean reval_blk_nil program_ofTerm
+
+-- `while` as a recursive definition
+#audit_clean while_as_call while_as_program
+
+-- Deployment of programs with named definitions
+#audit_clean gate_program gate_program_diverges gate_program_battery gate_program_fire
+
+-- `+mock`: the two-valued contract is unsound, the three-valued one sound
+#audit_clean three_valued_sound three_valued_mock
+#audit_clean natDec_twoValued natDec_not_threeValued two_valued_unsound
+#audit_clean word_jet_sound
