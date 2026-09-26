@@ -60,7 +60,8 @@ invalid-axis witnesses still panic. A differential run against pure-nock-lean
 is not planned; the evaluation-order probe already characterizes where it
 differs.
 
-**9.2 Formal bridge.**
+**9.2 Formal bridge.** Deferred; tracked in issue #7, which supersedes the
+statements below in light of the 9.0.2 evaluation-order findings.
 - A separate Lake package `bridge/`, with its own `lean-toolchain` (4.31) and
   lakefile. It requires lean-nock by path (`..`) and pure-nock-lean by git at
   tag `ncc/pure-nock-drop1.2.2`.
