@@ -11,8 +11,8 @@ paper, but no claim the paper makes depends on it.
 `two_valued_unsound`: the canonical count-up `dec`, jetted by native
 decrement, agrees on every value (`natDec_twoValued`), yet under `+mock` the
 jetted call on `0` observes `[2 ~]` while the formula diverges.
-`three_valued_sound` / `three_valued_mock`: a jet meeting (1a)–(1c), with
-punting allowed anywhere, is indistinguishable from its formula.
+`three_valued_sound` / `three_valued_mock`: a jet that on every subject punts
+or meets (2a)–(2c) is indistinguishable from its formula.
 `word_jet_sound`: every Λ word, jetted by its C model, meets the contract.
 
 ---

@@ -1,0 +1,3 @@
+[toolchain]
+# Must match the nockchain checkout's pin (nockchain/rust-toolchain.toml).
+channel = "nightly-2026-04-03"

@@ -35,3 +35,6 @@ wdErr.txt
 wdIn.txt
 wdOut.txt
 downstream_releases/
+
+# diff/: generated NockVM oracle manifest and build
+/diff/nockvm-oracle/generated/

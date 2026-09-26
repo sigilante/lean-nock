@@ -1,0 +1,22 @@
+# Rendered by diff/run.py into generated/Cargo.toml; edit this template.
+# @NOCKVM@ and @IBIG@ are absolute paths into a nockchain checkout.
+
+[package]
+name = "lean-nock-nockvm-oracle"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+nockvm = { path = "@NOCKVM@" }
+ibig = { path = "@IBIG@" }
+either = "1"
+
+[[bin]]
+name = "nockvm-oracle"
+path = "../src/main.rs"
+
+[profile.release]
+panic = "unwind"
+
+[workspace]

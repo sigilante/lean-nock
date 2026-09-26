@@ -35,7 +35,7 @@ changes (see [Audit](#the-audit-manifest)).
 | Class D: `ifte` and `while` schemas; agreement on values and crashes | **discharged** | `composition_term` |
 | Class D: agreement on divergence ("equal least fixed points") | **discharged** | `composition_diverges` |
 | The two-valued contract is unsound: `+mock` observes a jet that exits where its formula diverges | **discharged** (witness: count-up `dec` jetted by native decrement) | `two_valued_unsound`, `natDec_twoValued`, `natDec_not_threeValued` |
-| The three-valued contract (1a)–(1c), punting allowed anywhere, is sound, including under `+mock` | **discharged** | `three_valued_sound`, `three_valued_mock` |
+| The three-valued contract (on every subject, punt or meet (2a)–(2c)) is sound, including under `+mock` | **discharged** | `three_valued_sound`, `three_valued_mock` |
 | Every Λ word, jetted by its C model, meets the three-valued contract | **discharged** | `word_jet_sound` |
 | Named definitions: self- and mutual recursion via a multi-armed battery, calls as opcode-9 refires | **discharged**, on values, crashes, and divergence | `rcomposition`, `rcomposition_diverges`, `program_term`, `program_diverges` |
 | A loop whose body calls a definition, written as the recursive definition `W := p_t · ifte(p_b · W, ε)` | **discharged**: the encoding has exactly `while`'s semantics | `while_as_call`, `while_as_program` |

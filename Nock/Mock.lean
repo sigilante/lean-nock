@@ -60,9 +60,11 @@ inductive Mock (E : Outcome → Prop) : Noun → Prop where
 def TwoValued (F : Noun) (j : Noun → JetOut) : Prop :=
   ∀ S v, NockEval S F (.val v) ↔ j S = .val v
 
-/-- The three-valued contract, Equations (1a)–(1c), with punting permitted
-    anywhere (it is a universally sound escape).  Clause (c) is implied by (a)
-    and (b) once punting is excluded; it is kept to mirror the paper. -/
+/-- The three-valued contract, as the paper states it: on every subject the
+    jet either punts, or Equations (2a)–(2c) all hold.  `bail` stands for every
+    non-returning jet behavior — a nondeterministic bail or divergence — since
+    neither is observable from inside Nock.  Clause (c) is implied by (a) and
+    (b) once punting is excluded; it is kept to mirror the paper. -/
 def ThreeValued (F : Noun) (j : Noun → JetOut) : Prop :=
   ∀ S, j S ≠ .punt →
     (∀ v, NockEval S F (.val v) ↔ j S = .val v) ∧

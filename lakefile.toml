@@ -8,3 +8,8 @@ name = "Nock"
 [[lean_exe]]
 name = "main"
 root = "Main"
+
+[[lean_exe]]
+name = "export-corpus"
+root = "ExportCorpus"
+srcDir = "diff"
