@@ -13,6 +13,7 @@ import Nock.Backward
 import Nock.Composition
 import Nock.Hint
 import Nock.Gate
+import Nock.Rec
 
 /-!
 # The audit manifest — build-enforced
@@ -125,3 +126,12 @@ open Nock.Audit
 -- Deployment: the term packaged as a one-armed gate core
 #audit_clean gateLoad_eval gateUnload_eval gate_battery
 #audit_clean gate_sound gate_complete gate_term gate_diverges gate_fire gate_call
+
+-- The canonical count-up `dec`, unguarded: its complete profile
+#audit_clean countUp_correct countUp_loop_diverges countUp_diverges
+#audit_clean countUp_zero_diverges countUp_cell_diverges
+
+-- Named definitions: self- and mutually recursive words
+#audit_clean fasO_armAx reval_sound rback_fuel
+#audit_clean rcomposition rcomposition_diverges program_term program_diverges
+#audit_clean reval_blk_nil program_ofTerm
