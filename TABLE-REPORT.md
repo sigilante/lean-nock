@@ -13,6 +13,12 @@ oracle (676 runs, five fuel schedules, zero mismatches — §D), then **proved**
 `composition_term` gives `NockEval S (NT t) o ↔ CEval t S o` over the full term
 algebra, and `composition_diverges` extends the agreement to divergence.
 
+**Table C, rows `add` and `sub` — DISCHARGED (kernel)** by `leaf_add` and
+`leaf_sub`. The paper names these rows' Nock formulas only as "inc-loop" and
+"dec-loop", so there was no printed listing to put on trial; the formulas are
+the artifact's (`Nock/Comp.lean`). The ⊥-domain column is transcribed into `cw`
+and discharged as stated, over all nouns.
+
 ## Claim gradient
 
 The three words are not interchangeable and the paper must respect the
@@ -20,7 +26,7 @@ difference:
 
 | status | meaning | who says so |
 | --- | --- | --- |
-| **discharged** | a Lean theorem, kernel-checked | Tables A, B; Table C's `dec` row; the Class D schemas |
+| **discharged** | a Lean theorem, kernel-checked | Tables A, B; Table C's `dec`, `add`, `sub` rows; the Class D schemas; named definitions |
 | **confirmed** | agreement of two executable models over a corpus | *(nothing outstanding)* |
 | **prose** | argued, not executed | everything else |
 

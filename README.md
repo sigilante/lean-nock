@@ -28,10 +28,12 @@ changes (see [Audit](#the-audit-manifest)).
 | Nock 4K semantics, three-valued (value / crash / divergence) | relation + fuel interpreter, sound, complete, deterministic | `Eval.lean`, `Fuel.lean` |
 | Table A leaf contracts (`dup drop swap over cons head tail`) | **discharged**, over all nouns | `leaf_correct` |
 | Table B leaf contracts (`inc eq cel?`) | **discharged**, over all nouns | `leaf_correct` |
-| Table C: guarded `dec` (algorithm substitution) | **discharged** | `leaf_correct` (`leaf_dec`) |
+| Table C: guarded `dec`, `add` (inc-loop), `sub` (dec-loop) | **discharged**, over all nouns, crash rows included | `leaf_correct` (`leaf_dec`, `leaf_add`, `leaf_sub`) |
+| The canonical count-up `dec` diverges at `0` and on a cell | **discharged** | `countUp_zero_diverges`, `countUp_cell_diverges` (and `countUp_correct`) |
 | Composition over the free monoid of words | **discharged** | `composition`, `composition_agree` |
 | Class D: `ifte` and `while` schemas; agreement on values and crashes | **discharged** | `composition_term` |
 | Class D: agreement on divergence ("equal least fixed points") | **discharged** | `composition_diverges` |
+| Named definitions: self- and mutual recursion via a multi-armed battery, calls as opcode-9 refires | **discharged**, on values, crashes, and divergence | `rcomposition`, `rcomposition_diverges`, `program_term`, `program_diverges` |
 | Hints are transparent to the composition theorem | **discharged, with a side condition**: a dynamic hint's clue must produce a value | `composition_hint`, `composition_hint_const`, `hint_not_transparent` |
 | The Λ program packaged as a one-armed gate core (load/unload shim) | **discharged**, on values, crashes, and divergence | `gate_term`, `gate_diverges`, `gate_fire`, `gate_call` |
 | Battery identity: the dispatch key depends only on the source term | **discharged** | `gate_battery` |
@@ -49,11 +51,15 @@ changes (see [Audit](#the-audit-manifest)).
   agreement is the stronger biconditional: the C model diverges exactly when
   the Nock formula does. That strengthens the paper's clause (c), which only
   requires the jet to bail or punt where the formula diverges.
-- **Class C beyond `dec`** (`add`, `sub`, `mul`, `div` as guarded words) is not
-  yet mechanized. `HoonOne.lean` proves the value case of Hoon's compiled
-  `++add`/`++sub`, which is a different artifact.
-- **Named (recursive) definitions** are argued in the paper as instances of the
-  `while` fixpoint schema; the term grammar here has no recursive definitions.
+- **Class C `mul` and `div`** (Table C's "etc." row) are not mechanized; the
+  Class C words are `dec`, `add`, and `sub`. The paper prints no formula for
+  `add` or `sub`, so the artifact supplies them: `add` is an inc-loop and
+  `sub` a dec-loop over the guarded `dec` (see `Comp.lean`).
+- **Named definitions** are mechanized in their own simulation proof
+  (`Rec.lean`), of the same shape as the `while` proof. Loops with calls in
+  their bodies are written as recursive definitions; `while` is available
+  inside call-free blocks. The deployment theorems (`Gate.lean`) cover the
+  call-free term algebra.
 
 ---
 
@@ -142,6 +148,7 @@ Nock/
   Composition.lean   — composition_term, composition_diverges
   Hint.lean          — Opcode-11 hint transparency, and when it fails
   Gate.lean          — A Λ program packaged as a one-armed gate core (deployment)
+  Rec.lean           — Named definitions: self- and mutual recursion over a multi-armed battery
   Audit.lean         — Build-enforced axiom manifest and API freeze list
   Notation.lean      — n! bracket-notation macro for Noun literals
   RuntimeBridge.lean — native_decide bridge;  QUARANTINED
@@ -224,6 +231,28 @@ theorem composition_diverges (t : Term) (S : Noun) :
 The fixpoint argument is discharged operationally, as a simulation pair:
 forward by derivation induction (`ceval_sound`), backward by strong induction
 on interpreter fuel (`nockeval_complete`).
+
+### Named definitions
+
+`Rec.lean` extends the term algebra with calls into a table of definitions,
+every one of which may call every other.
+- **Compilation:** the table compiles to a multi-armed battery
+  `B = [NR d₀ [NR d₁ … 0]]`. Code runs against the core `[B S]` and returns
+  `[B S']`. A call to definition `i` is `[9 armAx(i) 0 1]`: an opcode-9 refire
+  of the core at that arm's axis (`fasO_armAx`).
+- **The battery is a constant:** no arm contains the battery, since calls
+  reach it through the subject. So `B` is finite and is pinned once by the
+  program entry `progF`.
+
+```lean
+theorem program_term (D : List RTerm) (m : RTerm) (S : Noun) (o : Outcome) :
+    NockEval S (progF D m) o ↔ REval D m S o
+```
+
+The proof is a simulation pair of the same shape as the `while` proof. A call
+re-enters a definition body that is not a subterm, but it runs at strictly
+smaller fuel, so the fuel induction covers self- and mutual recursion in one
+argument.
 
 ### Deployment
 

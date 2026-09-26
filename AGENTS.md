@@ -50,6 +50,9 @@ rm -rf .lake/build && lake build && ./scripts/gates.sh && ./scripts/oracle-check
 
 ## Open work (see README "What is not claimed")
 
-- Class C guarded words beyond `dec`: `add`, `sub`, and possibly `mul` / `div`.
-- Named (self-/mutually recursive) definitions as a term-algebra extension.
+- Class C `mul` / `div` as guarded words (`dec`, `add`, `sub` are done).
 - A `+mock` model making the unsoundness of the two-valued contract a theorem.
+- A quarantined bridge to `nockchain/pure-nock-lean`'s evaluator. It needs
+  Mathlib and admits `Classical.choice`, so it must never enter the proof chain.
+- Adding a `Word` constructor: extend `cw` exhaustively (no wildcard arms),
+  add a `leaf_*` lemma, and add a bullet to `leaf_correct`.
