@@ -1,57 +1,19 @@
 # Roadmap: remaining work against the companion paper
 
-Status at `v0.6`: every claim the paper makes about the artifact is discharged.
-Three items remain. They strengthen the paper, but none is needed for a claim
-it already makes. Items 8 and 9 are artifact work; item 10 is a paper edit that
-depends on a fact we should re-verify first.
+Status at `v0.7`: every claim the paper makes about the artifact is
+discharged, and items 8 and 10 are done. Item 9 remains: it strengthens the
+paper, but no claim the paper makes depends on it.
 
 ---
 
-## 8. A `+mock` model: make "the two-valued contract is unsound" a theorem
+## 8. A `+mock` model — DONE (`v0.7`, `Nock/Mock.lean`)
 
-**Why.** The abstract says "we show that the naïve two-valued contract is
-unsound", but the argument (paper §1) is prose. The ingredients are already
-proved: `countUp_correct` (the canonical `dec` returns `n` on `n+1`) and
-`countUp_zero_diverges` (it diverges at `0`). A C `dec` that bails `%exit` at
-`0` meets the two-valued contract and is observably wrong under `+mock`. That
-is the Vere `dec` incident (PR #960) as a theorem.
-
-**Design** — new module `Nock/Mock.lean`, in the proof chain:
-
-- `JetOut := val Noun | exit | bail | punt` — a jet's result: a value, a
-  deterministic bail (`%exit`), a nondeterministic bail (`%intr`, `%meme`, …),
-  or a punt to the formula.
-- `JetEval (j : Noun → JetOut) (S F : Noun) : Outcome → Prop` — the jetted
-  call: `val`/`exit` from the jet directly; `punt` runs `NockEval S F`; `bail`
-  has no in-Nock outcome (the event fails), modeled as absence of derivation.
-- `MockEval (E : Noun → Outcome → Prop) : Noun → Prop` — virtualization over
-  an evaluator: a value `v` observes as `[0 v]`, a deterministic crash as
-  `[2 ~]` (a *value*), and no outcome as no observation.
-- `TwoValued F j := ∀ S v, NockEval S F (.val v) ↔ j S = .val v`.
-- `ThreeValued F j` — Equations (1a)–(1c): values agree; `exit` iff
-  `.exit`; `Diverges S F → j S ∈ {bail, punt}`.
-
-**Theorems.**
-
-```lean
-theorem two_valued_unsound :
-    ∃ F j, TwoValued F j ∧ ∃ S o,
-      MockEval (JetEval j S F) o ∧ ¬ MockEval (NockEval S F) o
--- witness: F = countUp, j = native dec with exit at 0 and on cells, S = atom 0
-
-theorem three_valued_sound {F j} (h : ThreeValued F j) (S : Noun) (o : Noun) :
-    MockEval (JetEval j S F) o ↔ MockEval (NockEval S F) o
-```
-
-**Acceptance.** Both theorems in the manifest at `{propext, Quot.sound}`. The
-paper cites `two_valued_unsound` in the abstract's "we show" and in §1 after
-the three-valued contract, and `three_valued_sound` where the contract is
-stated.
-
-**Scope note.** `+mock` also services scry (opcode 12); that is not modeled
-and does not bear on the argument.
-
-**Effort.** Small: about 150–250 lines, no new infrastructure.
+`two_valued_unsound`: the canonical count-up `dec`, jetted by native
+decrement, agrees on every value (`natDec_twoValued`), yet under `+mock` the
+jetted call on `0` observes `[2 ~]` while the formula diverges.
+`three_valued_sound` / `three_valued_mock`: a jet meeting (1a)–(1c), with
+punting allowed anywhere, is indistinguishable from its formula.
+`word_jet_sound`: every Λ word, jetted by its C model, meets the contract.
 
 ---
 
@@ -134,42 +96,16 @@ relates big-step to small-step and the size depends on 9.0.2.
 
 ---
 
-## 10. Paper: replace the `eq` example (mss.tex §Ad Hoc, line ~133)
+## 10. Paper: replace the `eq` example — DONE (paper edited at `v0.7`)
 
-**Problem.** The paper says the mechanization "surfaced a live instance" of
-divergences "for which no test at any coverage carries signal (the operand
-order in `eq`)". But the order is invisible to every *observation*, not just
-every test. `tisN` is symmetric in value, and whichever operand lookup runs
-first, the formula crashes on exactly the same subjects. It mattered only to
-how the proof closes (TABLE-REPORT, note 1). Calling it a divergence
-overstates it.
-
-**Better evidence, for harness caveat 2 (mote preservation, line ~198).**
-pure-nock-lean's differential harness found that `nockvm` **panics** on an
-opcode-10 edit at an invalid axis, where Nock specifies a deterministic crash.
-Witnesses: `[42 10 [0 [1 99]] 0 1]`, `[[1 2] 10 [0 [1 [7 8]]] 0 1]`,
-`[[1 2] 10 [4 [1 99]] 0 1]`, `[[1 2] 10 [5 [1 99]] 0 1]`. A panic is an abort,
-not `%exit`, so `+mock` cannot turn it into `[%| trace]`. It is a live,
-production instance of exactly the coarsening that caveat 2 warns about, and a
-test (the differential harness) caught it.
-
-**Before editing, verify.**
-1. The finding is still open against current `nockchain` master. It was
-   recorded at `d278ef85`; the remediation patch in pure-nock-lean's
-   `patches/` is not an upstream PR.
-2. What Vere does on the same four witnesses, so the paper doesn't imply
-   something about Vere it hasn't checked.
-3. The author approves citing the finding. It is public, but it is Zorp's.
-
-**Proposed text** (to be finalized after verification):
-- §Ad Hoc, line ~133: "Our own mechanization surfaced an instance of the
-  adjacent class, a mismatch between the operand order of `eq`'s Nock formula
-  and its C routine. No test can detect it because no observation can. It
-  matters only to the proof, which closes in one order and not the other."
-- Harness caveat 2, a footnote: "This is not hypothetical. A differential
-  harness against a formal Nock semantics \citep{PureNockLean} found that
-  NockVM aborts on an opcode-10 edit at an invalid axis, where Nock specifies
-  a deterministic crash; under `+mock` the two are distinguishable."
-- Add a `PureNockLean` entry to `mss.bib` (repository, tag, access date).
-
-**Effort.** Small once the three checks are done.
+Verification, 2026-09-26:
+1. **Still open in NockVM.** At `nockchain/nockchain` `origin/master`
+   `73877be2`, `edit_with_space` (`crates/nockvm/rust/nockvm/src/interpreter.rs`)
+   calls `.expect("0 is not allowed as an edit axis")` and
+   `.expect("Invalid axis for edit")`. The opcode-10 dispatch validates
+   argument shape (`BAIL_EXIT`) but never the axis, and nothing on the
+   interpreter path catches the panic.
+2. **Vere is correct.** At `urbit/vere` `develop` `40a69573e9`, `u3i_edit`
+   (`pkg/noun/imprison.c`) bails `c3__exit` at axis 0 and when it descends
+   into an atom.
+3. The author approved citing the finding.

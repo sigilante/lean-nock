@@ -33,10 +33,15 @@ changes (see [Audit](#the-audit-manifest)).
 | Composition over the free monoid of words | **discharged** | `composition`, `composition_agree` |
 | Class D: `ifte` and `while` schemas; agreement on values and crashes | **discharged** | `composition_term` |
 | Class D: agreement on divergence ("equal least fixed points") | **discharged** | `composition_diverges` |
+| The two-valued contract is unsound: `+mock` observes a jet that exits where its formula diverges | **discharged** (witness: count-up `dec` jetted by native decrement) | `two_valued_unsound`, `natDec_twoValued`, `natDec_not_threeValued` |
+| The three-valued contract (1a)–(1c), punting allowed anywhere, is sound, including under `+mock` | **discharged** | `three_valued_sound`, `three_valued_mock` |
+| Every Λ word, jetted by its C model, meets the three-valued contract | **discharged** | `word_jet_sound` |
 | Named definitions: self- and mutual recursion via a multi-armed battery, calls as opcode-9 refires | **discharged**, on values, crashes, and divergence | `rcomposition`, `rcomposition_diverges`, `program_term`, `program_diverges` |
+| A loop whose body calls a definition, written as the recursive definition `W := p_t · ifte(p_b · W, ε)` | **discharged**: the encoding has exactly `while`'s semantics | `while_as_call`, `while_as_program` |
 | Hints are transparent to the composition theorem | **discharged, with a side condition**: a dynamic hint's clue must produce a value | `composition_hint`, `composition_hint_const`, `hint_not_transparent` |
 | The Λ program packaged as a one-armed gate core (load/unload shim) | **discharged**, on values, crashes, and divergence | `gate_term`, `gate_diverges`, `gate_fire`, `gate_call` |
 | Battery identity: the dispatch key depends only on the source term | **discharged** | `gate_battery` |
+| A program with named definitions packaged as a one-armed gate core | **discharged**, on values, crashes, and divergence | `gate_program`, `gate_program_diverges`, `gate_program_fire`, `gate_program_battery` |
 | Hoon's compiled `++dec`: value, underflow crash, divergence on a cell | **discharged** | `dec_correct`, `dec_underflow`, `dec_cell_diverges` |
 | Hoon's `++dec` naively lifted is *not* a valid word (guards are necessary) | **discharged** | `liftGate_decBat_not_a_word` |
 
@@ -47,19 +52,21 @@ changes (see [Audit](#the-audit-manifest)).
   NockVM is the paper's *harness contract*. That contract (mote-preserving
   strict sequencing, a load/unload bijection, exact bignums) is assumed, not
   proved.
-- **Punting and nondeterministic bails are not modeled.** The mechanized
-  agreement is the stronger biconditional: the C model diverges exactly when
-  the Nock formula does. That strengthens the paper's clause (c), which only
-  requires the jet to bail or punt where the formula diverges.
+- **The composition theorems' C model neither punts nor bails
+  nondeterministically.** Their agreement is the stronger biconditional: the C
+  model diverges exactly when the Nock formula does. Punts and bails are
+  treated at the level of the contract, over abstract jets (`Mock.lean`).
 - **Class C `mul` and `div`** (Table C's "etc." row) are not mechanized; the
   Class C words are `dec`, `add`, and `sub`. The paper prints no formula for
   `add` or `sub`, so the artifact supplies them: `add` is an inc-loop and
   `sub` a dec-loop over the guarded `dec` (see `Comp.lean`).
-- **Named definitions** are mechanized in their own simulation proof
-  (`Rec.lean`), of the same shape as the `while` proof. Loops with calls in
-  their bodies are written as recursive definitions; `while` is available
-  inside call-free blocks. The deployment theorems (`Gate.lean`) cover the
-  call-free term algebra.
+- **Named definitions** have their own simulation proof (`Rec.lean`), of the
+  same shape as the `while` proof, rather than reusing it.
+- **Scope of the recursive language:** calls occur in sequence and under
+  `ifte`. `while` is available inside call-free blocks. A loop whose body
+  calls a definition is written as a recursive definition, which loses
+  nothing (`while_as_call`).
+- **`+mock` over scry** (opcode 12) is not modeled.
 
 ---
 
@@ -149,6 +156,8 @@ Nock/
   Hint.lean          — Opcode-11 hint transparency, and when it fails
   Gate.lean          — A Λ program packaged as a one-armed gate core (deployment)
   Rec.lean           — Named definitions: self- and mutual recursion over a multi-armed battery
+  GateRec.lean       — A program with named definitions packaged as a gate core
+  Mock.lean          — +mock; the two-valued contract unsound, the three-valued contract sound
   Audit.lean         — Build-enforced axiom manifest and API freeze list
   Notation.lean      — n! bracket-notation macro for Noun literals
   RuntimeBridge.lean — native_decide bridge;  QUARANTINED
