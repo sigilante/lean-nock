@@ -51,18 +51,14 @@ chain, and lean-nock must not take a Mathlib dependency.
    - **Consequence for 9.2:** a formal bridge can claim agreement only where
      no such race occurs, or once pure-nock-lean adopts the runtime order.
 
-**9.1 Differential testing (cheap, do before any proof).**
-- Add a `lake exe export-corpus` target that writes lean-nock's compiled
-  formulas as `[subject formula]` lines in pure-nock-lean's `.nock` format
-  (`diff/corpus/*.nock`). Cover: every `phi w` on the TABLE-REPORT subject
-  corpus; the 26 Class D oracle programs × 26 subjects; the `Gate.lean` and
-  `Rec.lean` examples.
-- Add lean-nock's `nockF` as an engine in pure-nock-lean's `diff/compare.py`,
-  or a sibling script, and run lean-nock ↔ pure-nock-lean on both corpora.
-- With a Nockchain checkout:
-  `NOCKCHAIN_ROOT=… scripts/gate-pure-nock.sh --with-nockvm-diff` on the
-  exported corpus. This puts lean-nock's co-derived formulas in front of the
-  production interpreter.
+**9.1 Differential testing against NockVM — DONE (2026-09-26).** See
+`diff/README.md` and `diff/results/RESULTS.md`. All 4,211 lean-nock cases agree
+with NockVM at `73877be2`: every word, the Class D corpus, recursion, gate
+cores, hints, and the evaluation-order races. Of these, 4,065 agree exactly
+and 146 are non-terminating on both sides. The four known opcode-10
+invalid-axis witnesses still panic. A differential run against pure-nock-lean
+is not planned; the evaluation-order probe already characterizes where it
+differs.
 
 **9.2 Formal bridge.**
 - A separate Lake package `bridge/`, with its own `lean-toolchain` (4.31) and
