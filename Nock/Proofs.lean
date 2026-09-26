@@ -118,7 +118,7 @@ theorem fasO_seven_atomtail (x : Noun) (t : Nat) :
 -- ---------------------------------------------------------------------------
 -- haxO (#): tree update / edit-at-axis
 --
--- Leo pseudocode:  a = axis/2,  b = axis%2,  parent = /[a old]
+-- Recursion:  a = axis/2,  b = axis%2,  parent = /[a old]
 --   even (b=0):  new → head(parent);  return #(a, [new  /[(2a+1) old]], old)
 --   odd  (b=1):  new → tail(parent);  return #(a, [/[(2a)   old] new], old)
 -- Same structure as Lean: (n+2)/2 = a,  (n+2)%2 = b
