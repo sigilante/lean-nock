@@ -11,6 +11,8 @@ import Nock.Term
 import Nock.CEval
 import Nock.Backward
 import Nock.Composition
+import Nock.Hint
+import Nock.Gate
 
 /-!
 # The audit manifest — build-enforced
@@ -114,3 +116,12 @@ open Nock.Audit
 #audit_clean NT_ofProg ceval_sound nockeval_complete ceval_det
 #audit_clean composition_term composition_diverges
 #audit_clean ceval_ofProg composition_ofProg
+
+-- Deployment: hint transparency (opcode 11, `%fast` registration)
+#audit_clean hint_static_transparent hint_static_diverges
+#audit_clean hint_dynamic_transparent hint_dynamic_diverges hint_not_transparent
+#audit_clean composition_hint composition_hint_const composition_hint_diverges
+
+-- Deployment: the term packaged as a one-armed gate core
+#audit_clean gateLoad_eval gateUnload_eval gate_battery
+#audit_clean gate_sound gate_complete gate_term gate_diverges gate_fire gate_call
