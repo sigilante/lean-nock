@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [master]
+    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -22,19 +23,26 @@ jobs:
           lint: false
           use-mathlib-cache: false
 
-      # A scrubbed build. Nothing is replayed from a cache, so the audit
-      # manifest in Nock/Audit.lean is *elaborated*, not skipped -- it throws
-      # on axiom-footprint drift, on `sorry`, and on any rename of a name the
-      # companion manuscript cites.
-      - name: Scrubbed build (runs the audit manifest)
+      # A scrubbed build. The audit manifests are elaborated, not replayed:
+      # Nock/Audit.lean (via the `Nock` target) throws on axiom-footprint
+      # drift, on `sorry`, and on any rename of a name the companion manuscript
+      # cites; Main.lean (via the `Main` target) audits the native_decide
+      # bridge. Lake re-elaborates both on any upstream change even from a
+      # warm cache; the scrub is belt-and-braces.
+      - name: Scrubbed build (runs both audit manifests)
         run: |
           rm -rf .lake/build
           lake build
 
+      # The manifests guard names and axiom footprints, not theorem
+      # statements. This step catches what they cannot: a `sorry` in a
+      # declaration nothing cited depends on, deprecated API, unused variables.
       - name: Fail on any warning
         run: |
+          set -o pipefail
           rm -rf .lake/build
-          if lake build 2>&1 | tee build.log | grep -qi 'warning'; then
+          lake build 2>&1 | tee build.log
+          if grep -qi 'warning' build.log; then
             echo "::error::build emitted warnings"; grep -i warning build.log; exit 1
           fi
           echo "no warnings"

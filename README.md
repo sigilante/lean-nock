@@ -5,10 +5,10 @@ calculus: the companion artifact to *Jet-Accelerated Code and the Co-Design
 Problem* (N. E. Davis, *Urbit Systems Technical Journal*).
 
 A jet is a native routine that stands in for a Nock formula. Its contract is
-three-valued: on every subject, the formula and the jet must agree on the value
-returned, agree on deterministic crashes (`%exit`), and the jet may only bail
-or punt where the formula diverges. Crashes are observable under virtualization
-(`+mock`), so a two-valued contract is unsound.
+three-valued: on every subject the jet either punts, or it agrees with the
+formula on the value returned, agrees on deterministic crashes (`%exit`), and
+bails only where the formula diverges. Crashes are observable under
+virtualization (`+mock`), so a two-valued contract is unsound.
 
 This repository mechanizes the paper's **co-derivation** approach. A
 concatenative source language Λ is compiled by two folds: `Λ_N` to Nock and

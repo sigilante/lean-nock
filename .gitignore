@@ -3,10 +3,8 @@
 \#*
 .#*
 .lake
-lake-manifest.json
 /build
 /src/lakefile.toml
-/lakefile.toml
 GPATH
 GRTAGS
 GSYMS

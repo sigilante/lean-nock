@@ -1,6 +1,8 @@
 name = "Nock"
 version = "0.1.0"
-defaultTargets = ["Nock"]
+# `Main` is a default target so that plain `lake build` also elaborates the
+# `#audit_bridge` manifest in Main.lean (the native_decide quarantine).
+defaultTargets = ["Nock", "Main"]
 
 [[lean_lib]]
 name = "Nock"
