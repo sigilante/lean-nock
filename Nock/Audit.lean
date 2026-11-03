@@ -57,11 +57,21 @@ def allowedProofChain : List Name := [``propext, ``Quot.sound]
 def allowedBridge : List Name :=
   [``propext, ``Quot.sound, `Lean.ofReduceBool, `Lean.trustCompiler]
 
-private def auditAgainst (allowed : List Name) (ids : Array Ident) : CommandElabM Unit := do
+/-- Since Lean v4.29, `native_decide` records its compiler trust as a
+    per-theorem axiom `<thm>._native.native_decide.ax_<i>_<j>` rather than as a
+    bare use of `Lean.ofReduceBool`.  Such an axiom is tolerated only in the
+    bridge audit, and only for the very theorem being audited: it must live in
+    that theorem's own reserved `_native` namespace. -/
+private def isOwnNativeDecideAxiom (thm ax : Name) : Bool :=
+  (thm ++ `_native).isPrefixOf ax
+
+private def auditAgainst (allowed : List Name) (nativeDecide : Bool) (ids : Array Ident) :
+    CommandElabM Unit := do
   for id in ids do
     let n ← liftCoreM <| realizeGlobalConstNoOverload id
     let axs ← liftCoreM <| collectAxioms n
-    let bad := axs.filter (fun a => !allowed.contains a)
+    let bad := axs.filter (fun a =>
+      !allowed.contains a && !(nativeDecide && isOwnNativeDecideAxiom n a))
     unless bad.isEmpty do
       throwError
         "AUDIT FAILURE for {n}\n  \
@@ -73,11 +83,13 @@ private def auditAgainst (allowed : List Name) (ids : Array Ident) : CommandElab
 
 /-- Fails the build unless every named constant's axiom footprint is contained
     in `{propext, Quot.sound}`.  Also catches `sorryAx`, which is not allowed. -/
-elab "#audit_clean " ids:ident+ : command => auditAgainst allowedProofChain ids
+elab "#audit_clean " ids:ident+ : command => auditAgainst allowedProofChain false ids
 
-/-- As `#audit_clean`, but additionally tolerating the two compiler axioms that
-    `native_decide` introduces.  Only `Nock/RuntimeBridge.lean` may use this. -/
-elab "#audit_bridge " ids:ident+ : command => auditAgainst allowedBridge ids
+/-- As `#audit_clean`, but additionally tolerating the compiler axioms that
+    `native_decide` introduces (`Lean.ofReduceBool` / `Lean.trustCompiler`, or
+    the theorem's own `_native.native_decide` axiom on Lean ≥ v4.29).  Only
+    `Nock/RuntimeBridge.lean` may use this. -/
+elab "#audit_bridge " ids:ident+ : command => auditAgainst allowedBridge true ids
 
 end Nock.Audit
 

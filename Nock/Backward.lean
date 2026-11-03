@@ -155,7 +155,7 @@ private theorem inv_Nifte {k : Nat} {q₁ q₂ : Term} {S : Noun} {y : Outcome}
         dsimp only at h
         exact Or.inr (Or.inl ⟨r, k3 + 1, by omega, rfl, h⟩)
     | atom 1 =>
-      dsimp only at h
+      simp only at h
       rw [nF_op7] at h
       cases k2 with
       | zero => simp [nockF] at h

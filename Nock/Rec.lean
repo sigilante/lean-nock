@@ -442,10 +442,8 @@ private theorem inv_op6 {k : Nat} {X b c d : Noun} {o : Outcome}
         rw [hb] at h
         match r with
         | atom 0 =>
-          dsimp only at h
           exact Or.inr (Or.inl ⟨rfl, h⟩)
         | atom 1 =>
-          dsimp only at h
           exact Or.inr (Or.inr (Or.inl ⟨rfl, h⟩))
         | atom (n + 2) =>
           exact Or.inr (Or.inr (Or.inr ⟨atom (n + 2), rfl,
