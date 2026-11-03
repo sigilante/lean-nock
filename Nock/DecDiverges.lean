@@ -82,28 +82,37 @@ def decLoopCoreG (b : Nat) (sam ctx : Noun) : Noun :=
 theorem decLoopCoreG_atom (b n : Nat) (ctx : Noun) :
     decLoopCoreG b (atom n) ctx = decLoopCore b n ctx := rfl
 
-private theorem dec_slot6_evalG (b : Nat) (sam ctx : Noun) :
-    NockEval (decLoopCoreG b sam ctx) (cell (atom 0) (atom 6)) (.val (atom b)) :=
-  NockEval.op0 (by simp [decLoopCoreG, fasO])
 
-private theorem dec_cond_evalG (b : Nat) (sam ctx : Noun) :
-    NockEval (decLoopCoreG b sam ctx) decCondF (.val (tisN sam (atom (1 + b)))) :=
+/-- The loop core over an arbitrary battery `B` in the gate slot (axis 14)
+    and an arbitrary sample (axis 30).  The loop never reads axis 14. -/
+def decLoopCoreGB (B : Noun) (b : Nat) (sam ctx : Noun) : Noun :=
+  cell decLoopBat (cell (atom b) (cell B (cell sam ctx)))
+
+theorem decLoopCoreG_eq (b : Nat) (sam ctx : Noun) :
+    decLoopCoreG b sam ctx = decLoopCoreGB decBat b sam ctx := rfl
+
+private theorem dec_slot6_evalG (B : Noun) (b : Nat) (sam ctx : Noun) :
+    NockEval (decLoopCoreGB B b sam ctx) (cell (atom 0) (atom 6)) (.val (atom b)) :=
+  NockEval.op0 (by simp [decLoopCoreGB, fasO])
+
+private theorem dec_cond_evalG (B : Noun) (b : Nat) (sam ctx : Noun) :
+    NockEval (decLoopCoreGB B b sam ctx) decCondF (.val (tisN sam (atom (1 + b)))) :=
   NockEval.op5
-    (NockEval.op0 (by simp [decLoopCoreG, fasO]))
-    (NockEval.op4 (dec_slot6_evalG b sam ctx) (lusO_atom b))
+    (NockEval.op0 (by simp [decLoopCoreGB, fasO]))
+    (NockEval.op4 (dec_slot6_evalG B b sam ctx) (lusO_atom b))
 
-private theorem dec_edit_coreG (b : Nat) (sam ctx : Noun) :
-    NockEval (decLoopCoreG b sam ctx) decEditF (.val (decLoopCoreG (b + 1) sam ctx)) := by
+private theorem dec_edit_coreG (B : Noun) (b : Nat) (sam ctx : Noun) :
+    NockEval (decLoopCoreGB B b sam ctx) decEditF (.val (decLoopCoreGB B (b + 1) sam ctx)) := by
   refine NockEval.op10
     (NockEval.op0 (fasO_one _))
-    (NockEval.op4 (dec_slot6_evalG b sam ctx) (lusO_atom b)) ?_
-  show haxO (atom 6) (atom (1 + b)) (decLoopCoreG b sam ctx)
-    = some (decLoopCoreG (b + 1) sam ctx)
-  simp [decLoopCoreG, haxO_six, Nat.add_comm]
+    (NockEval.op4 (dec_slot6_evalG B b sam ctx) (lusO_atom b)) ?_
+  show haxO (atom 6) (atom (1 + b)) (decLoopCoreGB B b sam ctx)
+    = some (decLoopCoreGB B (b + 1) sam ctx)
+  simp [decLoopCoreGB, haxO_six, Nat.add_comm]
 
 /-- Firing the battery from a loop core looks up `decLoopBat` at axis 2. -/
-private theorem fasO_two_loopCoreG (b : Nat) (sam ctx : Noun) :
-    fasO (atom 2) (decLoopCoreG b sam ctx) = some decLoopBat :=
+private theorem fasO_two_loopCoreG (B : Noun) (b : Nat) (sam ctx : Noun) :
+    fasO (atom 2) (decLoopCoreGB B b sam ctx) = some decLoopBat :=
   fasO_head _ _
 
 -- ---------------------------------------------------------------------------
@@ -146,9 +155,9 @@ The equalities are taken as *hypotheses* rather than substituted, so that the
 indices stay variables and the motive is accepted.  That half of §1.3's
 pitfall note is correct, and is followed here.
 -/
-private theorem dec_loop_cell_aux (x y ctx : Noun) :
+private theorem dec_loop_cell_aux (B x y ctx : Noun) :
     ∀ {s f : Noun} {o : Outcome}, NockEval s f o →
-      ∀ k : Nat, s = decLoopCoreG k (cell x y) ctx →
+      ∀ k : Nat, s = decLoopCoreGB B k (cell x y) ctx →
         (f = decLoopBat ∨ f = decElseArm) → False := by
   intro s f o h
   induction h with
@@ -162,7 +171,7 @@ private theorem dec_loop_cell_aux (x y ctx : Noun) :
     · simp only [decLoopBat_parts, Noun.cell.injEq] at hf
       obtain ⟨-, hb, -, -⟩ := hf
       subst hb; subst hs
-      have canon := dec_cond_evalG k (cell x y) ctx
+      have canon := dec_cond_evalG B k (cell x y) ctx
       rw [tisN_cell_atom] at canon
       have := NockEval.deterministic h1 canon; simp at this
     · simp [decElseArm] at hf
@@ -180,7 +189,7 @@ private theorem dec_loop_cell_aux (x y ctx : Noun) :
     · simp only [decLoopBat_parts, Noun.cell.injEq] at hf
       obtain ⟨-, hb, -, -⟩ := hf
       subst hb; subst hs
-      have canon := dec_cond_evalG k (cell x y) ctx
+      have canon := dec_cond_evalG B k (cell x y) ctx
       rw [tisN_cell_atom] at canon
       exact hne1 (det_val h1 canon)
     · simp [decElseArm] at hf
@@ -190,7 +199,7 @@ private theorem dec_loop_cell_aux (x y ctx : Noun) :
     · simp only [decLoopBat_parts, Noun.cell.injEq] at hf
       obtain ⟨-, hb, -, -⟩ := hf
       subst hb; subst hs
-      have canon := dec_cond_evalG k (cell x y) ctx
+      have canon := dec_cond_evalG B k (cell x y) ctx
       rw [tisN_cell_atom] at canon
       exact no_val_exit canon h1
     · simp [decElseArm] at hf
@@ -202,8 +211,8 @@ private theorem dec_loop_cell_aux (x y ctx : Noun) :
     · simp only [decElseArm, Noun.cell.injEq] at hf
       obtain ⟨-, hbax, hc⟩ := hf
       subst hbax; subst hc; subst hs
-      have hcore : core = decLoopCoreG (k + 1) (cell x y) ctx :=
-        det_val h1 (dec_edit_coreG k (cell x y) ctx)
+      have hcore : core = decLoopCoreGB B (k + 1) (cell x y) ctx :=
+        det_val h1 (dec_edit_coreG B k (cell x y) ctx)
       subst hcore
       rw [fasO_two_loopCoreG] at h2
       have harm : arm = decLoopBat := by simpa using h2.symm
@@ -216,8 +225,8 @@ private theorem dec_loop_cell_aux (x y ctx : Noun) :
     · simp only [decElseArm, Noun.cell.injEq] at hf
       obtain ⟨-, hbax, hc⟩ := hf
       subst hbax; subst hc; subst hs
-      have hcore : core = decLoopCoreG (k + 1) (cell x y) ctx :=
-        det_val h1 (dec_edit_coreG k (cell x y) ctx)
+      have hcore : core = decLoopCoreGB B (k + 1) (cell x y) ctx :=
+        det_val h1 (dec_edit_coreG B k (cell x y) ctx)
       subst hcore
       rw [fasO_two_loopCoreG] at h2
       simp at h2
@@ -228,101 +237,130 @@ private theorem dec_loop_cell_aux (x y ctx : Noun) :
     · simp only [decElseArm, Noun.cell.injEq] at hf
       obtain ⟨-, -, hc⟩ := hf
       subst hc; subst hs
-      exact no_val_exit (dec_edit_coreG k (cell x y) ctx) h1
+      exact no_val_exit (dec_edit_coreG B k (cell x y) ctx) h1
   -- every other constructor's formula head disagrees with both targets
   | _ =>
     intro _ _ hf
     rcases hf with hf | hf <;> simp [decLoopBat_parts, decElseArm] at hf
 
+
+/-- The `++dec` count-up loop, started from any counter and over any battery
+    in the gate slot, never terminates when the sample is a cell. -/
+theorem dec_loop_cell_diverges_gen (B : Noun) (b : Nat) (x y ctx : Noun) :
+    Diverges (decLoopCoreGB B b (cell x y) ctx) decLoopBat :=
+  fun _ h => dec_loop_cell_aux B x y ctx h b rfl (Or.inl rfl)
+
 /-- The `++dec` count-up loop, started from any counter, never terminates when
-    the sample is a cell. -/
+    the sample is a cell.  The instance `B = decBat` of
+    `dec_loop_cell_diverges_gen`. -/
 theorem dec_loop_cell_diverges (b : Nat) (x y ctx : Noun) :
     Diverges (decLoopCoreG b (cell x y) ctx) decLoopBat :=
-  fun _ h => dec_loop_cell_aux x y ctx h b rfl (Or.inl rfl)
+  dec_loop_cell_diverges_gen decBat b x y ctx
 
 -- ---------------------------------------------------------------------------
--- The gate-level theorem
+-- The gate-level theorems
 -- ---------------------------------------------------------------------------
+
+/-- **The guarded body on a cell diverges, any battery.**  `decBat_guardBody`
+    on `[B [[x y] ctx]]`: the zero-guard passes, the loop is entered, and its
+    test is `atom 1` forever. -/
+theorem dec_body_cell_diverges (B x y ctx : Noun) :
+    Diverges (cell B (cell (cell x y) ctx)) decBat_guardBody := by
+  intro o hbody
+  -- The canonical guard test: =(0 sample) with a cell sample is `atom 1`.
+  have htest : NockEval (cell B (cell (cell x y) ctx))
+      (cell (atom 5) (cell (cell (atom 1) (atom 0)) (cell (atom 0) (atom 6))))
+      (.val (atom 1)) := by
+    have h0 : NockEval (cell B (cell (cell x y) ctx))
+        (cell (atom 1) (atom 0)) (.val (atom 0)) := NockEval.op1
+    have h6 : NockEval (cell B (cell (cell x y) ctx))
+        (cell (atom 0) (atom 6)) (.val (cell x y)) := NockEval.op0 (by simp [fasO])
+    have hq := NockEval.op5 h0 h6
+    rwa [tisN_atom_cell] at hq
+  -- The underflow guard.  Test is `atom 1`, so only op6_else survives.
+  rw [guardBody_parts] at hbody
+  cases hbody with
+  | crash_malformed hm => exact absurd hm (by decide)
+  | op6_then ht _ => have := NockEval.deterministic ht htest; simp at this
+  | op6_nonloob ht _ hne1 => exact hne1 (det_val ht htest)
+  | op6_crash ht => exact no_val_exit htest ht
+  | op6_else _ helse =>
+    -- Two op8 pushes (b := 0, then the loop battery).
+    rw [pushLoop_parts] at helse
+    cases helse with
+    | crash_malformed hm => exact absurd hm (by decide)
+    | op8_crash hb =>
+      exact no_val_exit
+        (show NockEval _ (cell (atom 1) (atom 0)) (.val (atom 0)) from NockEval.op1) hb
+    | @op8 _ _ _ r1 _ hb hrest =>
+      have hr1 : r1 = atom 0 :=
+        det_val hb (show NockEval _ (cell (atom 1) (atom 0)) (.val (atom 0)) from NockEval.op1)
+      subst hr1
+      cases hrest with
+      | crash_malformed hm => exact absurd hm (by decide)
+      | op8_crash hb2 =>
+        exact no_val_exit
+          (show NockEval _ (cell (atom 1) decLoopBat) (.val decLoopBat) from NockEval.op1) hb2
+      | @op8 _ _ _ r2 _ hb2 hfire =>
+        have hr2 : r2 = decLoopBat :=
+          det_val hb2
+            (show NockEval _ (cell (atom 1) decLoopBat) (.val decLoopBat) from NockEval.op1)
+        subst hr2
+        -- The subject is now `decLoopCoreGB B 0 (cell x y) ctx`, definitionally.
+        have hfire' : NockEval (decLoopCoreGB B 0 (cell x y) ctx)
+            (cell (atom 9) (cell (atom 2) (cell (atom 0) (atom 1)))) o := hfire
+        -- Fire the battery, landing in the divergent loop.
+        cases hfire' with
+        | crash_malformed hm => exact absurd hm (by decide)
+        | op9_crash hc => exact no_val_exit (NockEval.op0 (fasO_one _)) hc
+        | @op9_badaxis _ _ _ core hc hnone =>
+          have hcore : core = decLoopCoreGB B 0 (cell x y) ctx :=
+            det_val hc (NockEval.op0 (fasO_one _))
+          subst hcore
+          rw [fasO_two_loopCoreG] at hnone
+          simp at hnone
+        | @op9 _ _ _ core arm _ hc harm hloop =>
+          have hcore : core = decLoopCoreGB B 0 (cell x y) ctx :=
+            det_val hc (NockEval.op0 (fasO_one _))
+          subst hcore
+          rw [fasO_two_loopCoreG] at harm
+          have harm' : arm = decLoopBat := by simpa using harm.symm
+          subst harm'
+          exact dec_loop_cell_diverges_gen B 0 x y ctx o hloop
+
+/-- **`++dec` on a cell diverges, any hint clue.**  The hinted battery
+    `[11 [t c] decBat_guardBody]` on `S = [B [[x y] ctx]]` diverges, provided
+    the clue `c` does not crash on `S` (a crashing clue would crash the hint,
+    `op11_dyn_crash`; a diverging clue diverges too, so no more is needed). -/
+theorem dec_hint_cell_diverges (tag c B x y ctx : Noun)
+    (hc : ¬ NockEval (cell B (cell (cell x y) ctx)) c .exit) :
+    Diverges (cell B (cell (cell x y) ctx))
+      (cell (atom 11) (cell (cell tag c) decBat_guardBody)) := by
+  intro o h
+  cases h with
+  | crash_malformed hm => simp [Malformed] at hm
+  | op11_dyn_crash hce => exact hc hce
+  | op11_dynamic _ hbody => exact dec_body_cell_diverges B x y ctx o hbody
+
+/-- The hypothesis of `dec_hint_cell_diverges` is exactly what is needed: if
+    the clue crashes, the hinted battery crashes rather than diverging. -/
+theorem dec_hint_cell_diverges_needs_clue (tag c S : Noun)
+    (hce : NockEval S c .exit) :
+    NockEval S (cell (atom 11) (cell (cell tag c) decBat_guardBody)) .exit :=
+  NockEval.op11_dyn_crash hce
 
 /-- **`++dec` on a cell diverges.**  With a cell sample the zero-guard passes
     (a cell is not `atom 0`), the loop is entered, and its test is `atom 1`
     forever.  No `NockEval` derivation exists — neither a value nor a crash.
 
     Together with `dec_correct` and `dec_underflow` this completes the ⊥
-    profile of Hoon's compiled `++dec`. -/
+    profile of Hoon's compiled `++dec`.  The instance of
+    `dec_hint_cell_diverges` at `B = decBat`, `c = decBat_hintF`, whose clue
+    returns a value and so cannot crash. -/
 theorem dec_cell_diverges (x y ctx : Noun) :
     Diverges (cell decBat (cell (cell x y) ctx)) decBat := by
-  intro o h
-  -- decBat unfolds definitionally to its op11 hint layer
-  have hS : NockEval (cell decBat (cell (cell x y) ctx))
-      (cell (atom 11) (cell (cell (atom 1851876717) decBat_hintF) decBat_guardBody)) o := h
-  clear h
-  -- The canonical guard test: =(0 sample) with a cell sample is `atom 1`.
-  have htest : NockEval (cell decBat (cell (cell x y) ctx))
-      (cell (atom 5) (cell (cell (atom 1) (atom 0)) (cell (atom 0) (atom 6))))
-      (.val (atom 1)) := by
-    have h0 : NockEval (cell decBat (cell (cell x y) ctx))
-        (cell (atom 1) (atom 0)) (.val (atom 0)) := NockEval.op1
-    have h6 : NockEval (cell decBat (cell (cell x y) ctx))
-        (cell (atom 0) (atom 6)) (.val (cell x y)) := NockEval.op0 (by simp [fasO])
-    have hq := NockEval.op5 h0 h6
-    rwa [tisN_atom_cell] at hq
-  -- Layer 1: the `~_` hint.  Its clue computes, so op11_dyn_crash is impossible.
-  cases hS with
-  | crash_malformed hm => exact absurd hm (by decide)
-  | op11_dyn_crash hc =>
-    obtain ⟨_, hr⟩ := dec_hint_eval (cell decBat (cell (cell x y) ctx))
-    exact no_val_exit hr hc
-  | op11_dynamic _ hbody =>
-    -- Layer 2: the underflow guard.  Test is `atom 1`, so only op6_else survives.
-    rw [guardBody_parts] at hbody
-    cases hbody with
-    | crash_malformed hm => exact absurd hm (by decide)
-    | op6_then ht _ => have := NockEval.deterministic ht htest; simp at this
-    | op6_nonloob ht _ hne1 => exact hne1 (det_val ht htest)
-    | op6_crash ht => exact no_val_exit htest ht
-    | op6_else _ helse =>
-      -- Layer 3: two op8 pushes (b := 0, then the loop battery).
-      rw [pushLoop_parts] at helse
-      cases helse with
-      | crash_malformed hm => exact absurd hm (by decide)
-      | op8_crash hb =>
-        exact no_val_exit
-          (show NockEval _ (cell (atom 1) (atom 0)) (.val (atom 0)) from NockEval.op1) hb
-      | @op8 _ _ _ r1 _ hb hrest =>
-        have hr1 : r1 = atom 0 :=
-          det_val hb (show NockEval _ (cell (atom 1) (atom 0)) (.val (atom 0)) from NockEval.op1)
-        subst hr1
-        cases hrest with
-        | crash_malformed hm => exact absurd hm (by decide)
-        | op8_crash hb2 =>
-          exact no_val_exit
-            (show NockEval _ (cell (atom 1) decLoopBat) (.val decLoopBat) from NockEval.op1) hb2
-        | @op8 _ _ _ r2 _ hb2 hfire =>
-          have hr2 : r2 = decLoopBat :=
-            det_val hb2
-              (show NockEval _ (cell (atom 1) decLoopBat) (.val decLoopBat) from NockEval.op1)
-          subst hr2
-          -- The subject is now `decLoopCoreG 0 (cell x y) ctx`, definitionally.
-          have hfire' : NockEval (decLoopCoreG 0 (cell x y) ctx)
-              (cell (atom 9) (cell (atom 2) (cell (atom 0) (atom 1)))) o := hfire
-          -- Layer 4: fire the battery, landing in the divergent loop.
-          cases hfire' with
-          | crash_malformed hm => exact absurd hm (by decide)
-          | op9_crash hc => exact no_val_exit (NockEval.op0 (fasO_one _)) hc
-          | @op9_badaxis _ _ _ core hc hnone =>
-            have hcore : core = decLoopCoreG 0 (cell x y) ctx :=
-              det_val hc (NockEval.op0 (fasO_one _))
-            subst hcore
-            rw [fasO_two_loopCoreG] at hnone
-            simp at hnone
-          | @op9 _ _ _ core arm _ hc harm hloop =>
-            have hcore : core = decLoopCoreG 0 (cell x y) ctx :=
-              det_val hc (NockEval.op0 (fasO_one _))
-            subst hcore
-            rw [fasO_two_loopCoreG] at harm
-            have harm' : arm = decLoopBat := by simpa using harm.symm
-            subst harm'
-            exact dec_loop_cell_diverges 0 x y ctx o hloop
+  obtain ⟨_, hr⟩ := dec_hint_eval (cell decBat (cell (cell x y) ctx))
+  exact dec_hint_cell_diverges (atom 1851876717) decBat_hintF decBat x y ctx
+    (fun hce => no_val_exit hr hce)
 
 end Nock

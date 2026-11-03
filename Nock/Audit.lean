@@ -121,6 +121,14 @@ open Nock.Audit
 -- Phase 3.5: dec's complete ⊥ profile
 #audit_clean dec_loop_cell_diverges dec_cell_diverges
 
+-- Hoon's ++dec over any battery and any dynamic-hint tag and clue (the clue is evaluated and
+-- discarded; each theorem takes exactly the clue hypothesis its outcome needs)
+#audit_clean dec_loop_inv_gen dec_body_correct dec_body_underflow
+#audit_clean dec_hint_correct dec_hint_correct_needs_clue
+#audit_clean dec_hint_underflow dec_hint_underflow_needs_clue
+#audit_clean dec_loop_cell_diverges_gen dec_body_cell_diverges
+#audit_clean dec_hint_cell_diverges dec_hint_cell_diverges_needs_clue
+
 -- Phase 4a/4c: words, leaf contracts, composition over the free monoid
 #audit_clean leaf_correct composition composition_agree
 #audit_clean word_crash_total not_denotable_of_diverges

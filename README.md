@@ -44,6 +44,7 @@ changes (see [Audit](#the-audit-manifest)).
 | Battery identity: the dispatch key depends only on the source term | **discharged** | `gate_battery` |
 | A program with named definitions packaged as a one-armed gate core | **discharged**, on values, crashes, and divergence | `gate_program`, `gate_program_diverges`, `gate_program_fire`, `gate_program_battery` |
 | Hoon's compiled `++dec`: value, underflow crash, divergence on a cell | **discharged** | `dec_correct`, `dec_underflow`, `dec_cell_diverges` |
+| The same, for any battery in the gate slot and any dynamic hint over the body (any tag, any clue) | **discharged**, each with exactly the clue hypothesis its outcome needs | `dec_body_correct`, `dec_body_underflow`, `dec_body_cell_diverges`, `dec_hint_correct`, `dec_hint_underflow`, `dec_hint_cell_diverges` (necessity: `dec_hint_*_needs_clue`) |
 | Hoon's `++dec` naively lifted is *not* a valid word (guards are necessary) | **discharged** | `liftGate_decBat_not_a_word` |
 
 ### What is *not* claimed
@@ -302,6 +303,23 @@ the sample as the stack `[sam ~]`, run, and unload the top.
   formula crashes regardless of `f` (`hint_not_transparent`). If `c` diverges,
   so does the hinted formula.
 - Constant clues `[1 k]` are always transparent (`composition_hint_const`).
+- Hoon's `++dec` does not depend on its hint clue. `decBat`'s outer layer is
+  the dynamic hint `[11 [%mean c] body]` (Hoon's `~_ leaf+"decrement-underflow"`;
+  tag `1851876717` is `%mean`). The guard and loop under the hint (`decBat_guardBody`) never read the gate's battery, so
+  `dec_body_correct`, `dec_body_underflow` and `dec_body_cell_diverges` hold
+  on `[B [sam ctx]]` for every `B`. Over a hinted battery
+  `[11 [t c] decBat_guardBody]` the clue is evaluated and discarded. The value
+  row needs `c` to produce a value (`dec_hint_correct`). The underflow row
+  needs only that `c` has some outcome, since a crashing clue is the same
+  `.exit` (`dec_hint_underflow`). The cell row needs only that `c` does not
+  crash, since a diverging clue still diverges (`dec_hint_cell_diverges`).
+  The `*_needs_clue` theorems show that none of these hypotheses can be
+  dropped. `dec_correct`, `dec_underflow` and `dec_cell_diverges` are the
+  instances at `decBat`'s own clue. A battery that differs from `decBat` only
+  in its hint therefore computes the same function. The tag and the clue are
+  arbitrary in these theorems, so this covers another trace message, no hint at
+  all (the body itself), and a `%fast` registration hint, whose name, parent axis
+  and hooks are metadata.
 
 ---
 

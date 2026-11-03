@@ -116,30 +116,68 @@ theorem dec_hint_eval (s : Noun) :
     ∃ r, NockEval s decBat_hintF (.val r) :=
   ⟨_, NockEval.autocons NockEval.op1 (NockEval.op0 (fasO_one s))⟩
 
+/-! ### Generalisation over the battery and the hint clue
+
+The computation never reads the gate's battery (axis 2 of the gate, axis 14
+of the loop core): the guard reads the sample at axis 6, the loop reads the
+counter at axis 6 and the sample at axis 30 and fires its own battery at
+axis 2.  So the proofs below are stated for an arbitrary noun `B` in the
+battery slot, and `decLoopCore` is the instance `decLoopCoreB decBat`.
+
+`decBat`'s outer layer is a dynamic hint `[11 [%mean c] body]` (tag
+`1851876717` is `%mean`: Hoon's `~_ leaf+"decrement-underflow"`, the
+stack-trace message).  It is the one place the battery's clue enters: the hint
+evaluates `c` against the subject and discards the result (`op11_dynamic`).
+The theorems below take the tag and the clue as arbitrary, so they cover any
+dynamic hint over the body, a `%fast` registration hint (name, parent axis,
+hooks) included.  The clue's content is irrelevant to the product; only
+whether `c` produces a value, crashes, or diverges matters (`Nock/Hint.lean`, `hint_dynamic_transparent`).  `dec_hint_correct`,
+`dec_hint_underflow` and (in `Nock/DecDiverges.lean`) `dec_hint_cell_diverges`
+take exactly the hypothesis on `c` each outcome needs, and
+`dec_hint_correct_needs_clue`, `dec_hint_underflow_needs_clue` show the
+hypotheses cannot be dropped.  `dec_correct` and `dec_underflow` are the
+instances at `B = decBat`, `c = decBat_hintF` (`dec_hint_eval`).
+-/
+
+/-- The loop core over an arbitrary battery `B` in the gate slot:
+    `[loopBat [b [B [n ctx]]]]`. -/
+def decLoopCoreB (B : Noun) (b n : Nat) (ctx : Noun) : Noun :=
+  cell decLoopBat (cell (atom b) (cell B (cell (atom n) ctx)))
+
+theorem decLoopCore_eq (b n : Nat) (ctx : Noun) :
+    decLoopCore b n ctx = decLoopCoreB decBat b n ctx := rfl
+
+/-- A `++dec` battery with an arbitrary `%mean` clue formula `c` over the
+    guard and loop: `[11 [%mean c] decBat_guardBody]`. -/
+def decBatWith (c : Noun) : Noun :=
+  cell (atom 11) (cell (cell (atom 1851876717) c) decBat_guardBody)
+
+theorem decBat_eq_with : decBat = decBatWith decBat_hintF := rfl
+
 -- Loop invariant helpers
 
-private theorem dec_slot6_eval (b n : Nat) (ctx : Noun) :
-    NockEval (decLoopCore b n ctx) (cell (atom 0) (atom 6)) (.val (atom b)) :=
-  NockEval.op0 (by simp [decLoopCore, fasO])
+private theorem dec_slot6_eval (B : Noun) (b n : Nat) (ctx : Noun) :
+    NockEval (decLoopCoreB B b n ctx) (cell (atom 0) (atom 6)) (.val (atom b)) :=
+  NockEval.op0 (by simp [decLoopCoreB, fasO])
 
-private theorem dec_cond_eval (b n : Nat) (ctx : Noun) :
-    NockEval (decLoopCore b n ctx)
+private theorem dec_cond_eval (B : Noun) (b n : Nat) (ctx : Noun) :
+    NockEval (decLoopCoreB B b n ctx)
       (cell (atom 5) (cell (cell (atom 0) (atom 30)) (cell (atom 4) (cell (atom 0) (atom 6)))))
       (.val (tisN (atom n) (atom (1 + b)))) :=
   NockEval.op5
-    (NockEval.op0 (by simp [decLoopCore, fasO]))
-    (NockEval.op4 (dec_slot6_eval b n ctx) (lusO_atom b))
+    (NockEval.op0 (by simp [decLoopCoreB, fasO]))
+    (NockEval.op4 (dec_slot6_eval B b n ctx) (lusO_atom b))
 
-private theorem dec_edit_core (b n : Nat) (ctx : Noun) :
-    NockEval (decLoopCore b n ctx)
+private theorem dec_edit_core (B : Noun) (b n : Nat) (ctx : Noun) :
+    NockEval (decLoopCoreB B b n ctx)
       (cell (atom 10) (cell (cell (atom 6) (cell (atom 4) (cell (atom 0) (atom 6))))
                             (cell (atom 0) (atom 1))))
-      (.val (decLoopCore (b + 1) n ctx)) := by
+      (.val (decLoopCoreB B (b + 1) n ctx)) := by
   refine NockEval.op10
     (NockEval.op0 (fasO_one _))
-    (NockEval.op4 (dec_slot6_eval b n ctx) (lusO_atom b)) ?_
-  show haxO (atom 6) (atom (1 + b)) (decLoopCore b n ctx) = some (decLoopCore (b + 1) n ctx)
-  simp [decLoopCore, haxO_six, Nat.add_comm]
+    (NockEval.op4 (dec_slot6_eval B b n ctx) (lusO_atom b)) ?_
+  show haxO (atom 6) (atom (1 + b)) (decLoopCoreB B b n ctx) = some (decLoopCoreB B (b + 1) n ctx)
+  simp [decLoopCoreB, haxO_six, Nat.add_comm]
 
 private theorem tisN_eq_true (b : Nat) : tisN (atom (b + 1)) (atom (1 + b)) = atom 0 := by
   simp [tisN, Nat.add_comm]
@@ -149,74 +187,130 @@ private theorem tisN_eq_false (b n : Nat) (h : b + 1 < n) :
   refine tisN_neq _ _ ?_
   intro hc; simp at hc; omega
 
-/-- **Dec loop invariant.** Running the loop battery against the loop core
-    `[loopBat [b [decBat [n ctx]]]]` where `b < n` produces `atom (n - 1)`.
-
-    Proved by induction on `n - b - 1` (remaining iterations). -/
-theorem dec_loop_inv (b n : Nat) (ctx : Noun) (hb : b < n) :
-    NockEval (decLoopCore b n ctx) decLoopBat (.val (atom (n - 1))) := by
+/-- **Dec loop invariant, any battery.**  Running the loop battery against
+    `[loopBat [b [B [n ctx]]]]` where `b < n` produces `atom (n - 1)`,
+    whatever `B` is.  Proved by induction on `n - b - 1`. -/
+theorem dec_loop_inv_gen (B : Noun) (b n : Nat) (ctx : Noun) (hb : b < n) :
+    NockEval (decLoopCoreB B b n ctx) decLoopBat (.val (atom (n - 1))) := by
   obtain ⟨d, hd⟩ : ∃ d, n = b + 1 + d := ⟨n - b - 1, by omega⟩
   subst hd
   induction d generalizing b with
   | zero =>
-    -- Base: n = b + 1, condition =(n, +(b)) is true, return b
     simp only [Nat.add_zero, show b + 1 - 1 = b from by omega]
-    change NockEval (decLoopCore b (b + 1) ctx)
+    change NockEval (decLoopCoreB B b (b + 1) ctx)
       (cell (atom 6) (cell _ (cell _ _))) (.val (atom b))
-    refine NockEval.op6_then ?_ (dec_slot6_eval b (b + 1) ctx)
-    have h := dec_cond_eval b (b + 1) ctx
+    refine NockEval.op6_then ?_ (dec_slot6_eval B b (b + 1) ctx)
+    have h := dec_cond_eval B b (b + 1) ctx
     rwa [tisN_eq_true] at h
   | succ d ih =>
-    -- Step: n = b + 2 + d, condition false, recurse with b+1
     simp only [show b + 1 + (d + 1) - 1 = b + 1 + d from by omega]
-    change NockEval (decLoopCore b (b + 1 + (d + 1)) ctx)
+    change NockEval (decLoopCoreB B b (b + 1 + (d + 1)) ctx)
       (cell (atom 6) (cell _ (cell _ _))) (.val (atom (b + 1 + d)))
     refine NockEval.op6_else ?_ ?_
-    · have h := dec_cond_eval b (b + 1 + (d + 1)) ctx
+    · have h := dec_cond_eval B b (b + 1 + (d + 1)) ctx
       rwa [tisN_eq_false b (b + 1 + (d + 1)) (by omega)] at h
-    · -- Else: [9 2 [10 [6 [4 [0 6]]] [0 1]]] — edit b → b+1, fire
-      refine NockEval.op9 (dec_edit_core b (b + 1 + (d + 1)) ctx) (fasO_head _ _) ?_
+    · refine NockEval.op9 (dec_edit_core B b (b + 1 + (d + 1)) ctx) (fasO_head _ _) ?_
       have h1 : b + 1 + (d + 1) = (b + 1) + 1 + d := by omega
       rw [h1]
       have := ih (b + 1) (by omega)
       rwa [show (b + 1) + 1 + d - 1 = b + 1 + d from by omega] at this
 
-/-- **Dec correctness.** Running the `++dec` battery against a gate core
-    `[decBat [n+1 ctx]]` produces `atom n` via a valid `NockEval` derivation.
+/-- **Dec loop invariant.** Running the loop battery against the loop core
+    `[loopBat [b [decBat [n ctx]]]]` where `b < n` produces `atom (n - 1)`.
+    The instance `B = decBat` of `dec_loop_inv_gen`. -/
+theorem dec_loop_inv (b n : Nat) (ctx : Noun) (hb : b < n) :
+    NockEval (decLoopCore b n ctx) decLoopBat (.val (atom (n - 1))) :=
+  dec_loop_inv_gen decBat b n ctx hb
 
-    Combined with `callGate_gate_eval`, this proves that calling `++dec`
-    on any positive atom computes the correct decrement. -/
-theorem dec_correct (n : Nat) (ctx : Noun) :
-    NockEval (cell decBat (cell (atom (n + 1)) ctx)) decBat (.val (atom n)) := by
-  -- Decompose formula via definitional equality (subject stays abstract)
-  show NockEval (cell decBat (cell (atom (n + 1)) ctx))
-    (cell (atom 11) (cell (cell (atom 1851876717) decBat_hintF) decBat_guardBody))
-    (.val (atom n))
-  -- Step 1: op11_dynamic — the hint computes, then its value is discarded
-  obtain ⟨_, hhint⟩ := dec_hint_eval (cell decBat (cell (atom (n + 1)) ctx))
-  refine NockEval.op11_dynamic hhint ?_
-  -- Step 2: op6_else — underflow guard, n+1 ≠ 0 so take the else branch
+/-- **The guarded body, any battery.**  `decBat_guardBody` (the computation
+    under the `~_` hint) on a core `[B [n+1 ctx]]` produces `atom n`. -/
+theorem dec_body_correct (B : Noun) (n : Nat) (ctx : Noun) :
+    NockEval (cell B (cell (atom (n + 1)) ctx)) decBat_guardBody (.val (atom n)) := by
   rw [guardBody_parts]
   refine NockEval.op6_else ?_ ?_
-  · have h0 : NockEval (cell decBat (cell (atom (n + 1)) ctx))
+  · have h0 : NockEval (cell B (cell (atom (n + 1)) ctx))
                 (cell (atom 1) (atom 0)) (.val (atom 0)) := NockEval.op1
-    have h6 : NockEval (cell decBat (cell (atom (n + 1)) ctx))
+    have h6 : NockEval (cell B (cell (atom (n + 1)) ctx))
                 (cell (atom 0) (atom 6)) (.val (atom (n + 1))) :=
       NockEval.op0 (by simp [fasO])
     have eq := NockEval.op5 h0 h6
     rwa [show tisN (atom 0) (atom (n + 1)) = atom 1 from
       tisN_neq _ _ (by intro hc; injection hc with hc; omega)] at eq
-  · -- Steps 3-5: push b=0, push loopBat, fire loop
-    rw [pushLoop_parts]
-    refine NockEval.op8 NockEval.op1 ?_   -- push b=0
-    refine NockEval.op8 NockEval.op1 ?_   -- push loopBat (quoted by [1 loopBat])
-    -- Subject is now decLoopCore 0 (n + 1) ctx (definitionally)
-    show NockEval (decLoopCore 0 (n + 1) ctx)
+  · rw [pushLoop_parts]
+    refine NockEval.op8 NockEval.op1 ?_
+    refine NockEval.op8 NockEval.op1 ?_
+    show NockEval (decLoopCoreB B 0 (n + 1) ctx)
       (cell (atom 9) (cell (atom 2) (cell (atom 0) (atom 1)))) (.val (atom n))
-    refine NockEval.op9 (core := decLoopCore 0 (n + 1) ctx) (arm := decLoopBat)
+    refine NockEval.op9 (core := decLoopCoreB B 0 (n + 1) ctx) (arm := decLoopBat)
       (NockEval.op0 (fasO_one _)) (fasO_head _ _) ?_
-    have h := dec_loop_inv 0 (n + 1) ctx (by omega)
+    have h := dec_loop_inv_gen B 0 (n + 1) ctx (by omega)
     simpa using h
+
+/-- **The guarded body underflows, any battery.**  On `[B [0 ctx]]` the guard's
+    then-branch `[0 0]` crashes. -/
+theorem dec_body_underflow (B ctx : Noun) :
+    NockEval (cell B (cell (atom 0) ctx)) decBat_guardBody .exit := by
+  rw [guardBody_parts]
+  refine NockEval.op6_then ?_ ?_
+  · have h0 : NockEval (cell B (cell (atom 0) ctx))
+                (cell (atom 1) (atom 0)) (.val (atom 0)) := NockEval.op1
+    have h6 : NockEval (cell B (cell (atom 0) ctx))
+                (cell (atom 0) (atom 6)) (.val (atom 0)) :=
+      NockEval.op0 (by simp [fasO])
+    have eq := NockEval.op5 h0 h6
+    rwa [tisN_refl] at eq
+  · exact NockEval.op0_crash (fasO_zero _)
+
+/-- **Dec correctness, any hint clue.**  A battery `[11 [t c] decBat_guardBody]`
+    run on the core `S = [B [n+1 ctx]]` produces `atom n`, provided the clue
+    formula `c` produces a value on `S` (it is evaluated, then discarded). -/
+theorem dec_hint_correct (tag c B : Noun) (n : Nat) (ctx : Noun) {r : Noun}
+    (hc : NockEval (cell B (cell (atom (n + 1)) ctx)) c (.val r)) :
+    NockEval (cell B (cell (atom (n + 1)) ctx))
+      (cell (atom 11) (cell (cell tag c) decBat_guardBody)) (.val (atom n)) :=
+  NockEval.op11_dynamic hc (dec_body_correct B n ctx)
+
+/-- The value hypothesis of `dec_hint_correct` is exactly what is needed: if
+    the hinted battery returns a value, the clue produced one. -/
+theorem dec_hint_correct_needs_clue (tag c S : Noun) {v : Noun}
+    (h : NockEval S (cell (atom 11) (cell (cell tag c) decBat_guardBody)) (.val v)) :
+    ∃ r, NockEval S c (.val r) := by
+  cases h with
+  | op11_dynamic hc _ => exact ⟨_, hc⟩
+
+/-- **Dec underflow, any hint clue.**  On `[B [0 ctx]]` the hinted battery
+    crashes, provided the clue has *some* outcome: a crashing clue crashes the
+    hint (`op11_dyn_crash`), which is the same `.exit`; only a diverging clue
+    changes the outcome. -/
+theorem dec_hint_underflow (tag c B ctx : Noun)
+    (hc : ∃ o, NockEval (cell B (cell (atom 0) ctx)) c o) :
+    NockEval (cell B (cell (atom 0) ctx))
+      (cell (atom 11) (cell (cell tag c) decBat_guardBody)) .exit := by
+  obtain ⟨o, hc⟩ := hc
+  cases o with
+  | val _ => exact NockEval.op11_dynamic hc (dec_body_underflow B ctx)
+  | exit => exact NockEval.op11_dyn_crash hc
+
+/-- The outcome hypothesis of `dec_hint_underflow` is exactly what is needed. -/
+theorem dec_hint_underflow_needs_clue (tag c S : Noun) {o : Outcome}
+    (h : NockEval S (cell (atom 11) (cell (cell tag c) decBat_guardBody)) o) :
+    ∃ o', NockEval S c o' := by
+  cases h with
+  | crash_malformed hm => simp [Malformed] at hm
+  | op11_dynamic hc _ => exact ⟨_, hc⟩
+  | op11_dyn_crash hc => exact ⟨_, hc⟩
+
+/-- **Dec correctness.** Running the `++dec` battery against a gate core
+    `[decBat [n+1 ctx]]` produces `atom n` via a valid `NockEval` derivation.
+    The instance of `dec_hint_correct` at `B = decBat`, `c = decBat_hintF`,
+    whose clue is a static cons (`dec_hint_eval`).
+
+    Combined with `callGate_gate_eval`, this proves that calling `++dec`
+    on any positive atom computes the correct decrement. -/
+theorem dec_correct (n : Nat) (ctx : Noun) :
+    NockEval (cell decBat (cell (atom (n + 1)) ctx)) decBat (.val (atom n)) := by
+  obtain ⟨_, hhint⟩ := dec_hint_eval (cell decBat (cell (atom (n + 1)) ctx))
+  exact dec_hint_correct (atom 1851876717) decBat_hintF decBat n ctx hhint
 
 /-- **Dec underflow crashes.**  This is the theorem the old semantics got
     *wrong*: because `fas`'s axis-0 arm was `panic!`, the guard's crash branch
@@ -225,27 +319,12 @@ theorem dec_correct (n : Nat) (ctx : Noun) :
 
     The guard `?<  =(0 a)` tests `=(0, sample)`; with sample `0` the test is
     true, so op6 takes the *then* branch, which is the formula `[0 0]` —
-    axis 0, an unconditional crash.  The `.exit` propagates outward through
-    the tail-position outcome parameters of `op6_then` and `op11_dynamic`
-    with no extra constructors. -/
+    axis 0, an unconditional crash.  The instance of `dec_hint_underflow` at
+    `B = decBat`, `c = decBat_hintF`. -/
 theorem dec_underflow (ctx : Noun) :
     NockEval (cell decBat (cell (atom 0) ctx)) decBat .exit := by
-  show NockEval (cell decBat (cell (atom 0) ctx))
-    (cell (atom 11) (cell (cell (atom 1851876717) decBat_hintF) decBat_guardBody)) .exit
   obtain ⟨_, hhint⟩ := dec_hint_eval (cell decBat (cell (atom 0) ctx))
-  refine NockEval.op11_dynamic hhint ?_
-  rw [guardBody_parts]
-  refine NockEval.op6_then ?_ ?_
-  · -- guard test: =(0 sample) with sample = 0, so tisN (atom 0) (atom 0) = atom 0
-    have h0 : NockEval (cell decBat (cell (atom 0) ctx))
-                (cell (atom 1) (atom 0)) (.val (atom 0)) := NockEval.op1
-    have h6 : NockEval (cell decBat (cell (atom 0) ctx))
-                (cell (atom 0) (atom 6)) (.val (atom 0)) :=
-      NockEval.op0 (by simp [fasO])
-    have eq := NockEval.op5 h0 h6
-    rwa [tisN_refl] at eq
-  · -- then-branch is [0 0]: axis 0 crashes
-    exact NockEval.op0_crash (fasO_zero _)
+  exact dec_hint_underflow (atom 1851876717) decBat_hintF decBat ctx ⟨_, hhint⟩
 
 /-! ## `++add` — unsigned addition
 
