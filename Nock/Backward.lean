@@ -5,6 +5,8 @@ import Nock.Fuel
 import Nock.Comp
 import Nock.Term
 import Nock.CEval
+
+namespace Nock
 open Noun
 
 /-!
@@ -444,3 +446,5 @@ theorem nockeval_complete {t : Term} {S o}
     (h : NockEval S (NT t) o) : CEval t S o :=
   let ⟨k, hk⟩ := nockF_complete h
   (backward_fuel k).1 hk
+
+end Nock

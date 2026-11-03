@@ -1,6 +1,8 @@
 import Nock.Basic
 import Nock.Proofs
 import Nock.Eval
+
+namespace Nock
 open Noun
 
 /-!
@@ -691,3 +693,5 @@ theorem diverges_iff_fuel (a f : Noun) :
     obtain ⟨k, hk⟩ := nockF_complete hev
     rw [hnone k] at hk
     simp at hk
+
+end Nock

@@ -108,6 +108,13 @@ on three kinds of drift:
 - any rename or deletion of a manifest name, since the manifest doubles as the
   freeze list for theorems the paper cites.
 
+Every declaration of the library lives in `namespace Nock` (`Nock.Outcome`,
+`Nock.NockEval`, `Nock.composition_term`, …); nothing is re-exported to the
+root. The manifest, this README and the paper cite the names as they read under
+`open Nock`. The namespace is what lets the library be imported beside other
+Lean developments that use the same root-level vocabulary (`Outcome`,
+`Diverges`, `Term`, `Word`).
+
 Two modules are **quarantined**: nothing in the proof chain imports them, and
 `scripts/gates.sh` enforces this.
 
@@ -183,6 +190,8 @@ The quarantine governs `CsemF`, the C-side oracle, not `nockF`.
 plus explicit crash-propagation constructors.
 
 ```lean
+namespace Nock
+
 inductive Outcome
   | val  : Noun → Outcome
   | exit : Outcome

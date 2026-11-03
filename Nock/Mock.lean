@@ -3,6 +3,8 @@ import Nock.Proofs
 import Nock.Eval
 import Nock.Fuel
 import Nock.Comp
+
+namespace Nock
 open Noun
 
 /-!
@@ -226,3 +228,5 @@ theorem word_jet_sound (w : Word) : ThreeValued (phi w) (wordJet w) := by
       cases hc : cw w S with
       | val u => rw [hc] at hj; cases hj
       | exit  => rw [hc] at hl; exact hl
+
+end Nock

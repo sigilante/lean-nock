@@ -5,6 +5,7 @@ import Nock.Basic
 import Nock.RuntimeBridge
 import Nock.Oracle
 import Nock.Audit
+open Nock
 open Noun
 open Nock.Audit
 

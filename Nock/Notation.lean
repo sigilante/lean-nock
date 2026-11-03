@@ -1,5 +1,7 @@
 import Lean
 import Nock.Basic
+
+namespace Nock
 open Noun
 
 /-! ## Nock bracket-notation macro
@@ -83,3 +85,5 @@ macro "n!" s:str : term => do
 def Noun.toNockStr : Noun → String
   | atom n   => toString n
   | cell a b => "[" ++ a.toNockStr ++ " " ++ b.toNockStr ++ "]"
+
+end Nock

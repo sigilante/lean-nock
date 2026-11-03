@@ -1,5 +1,7 @@
 import Nock.Basic
 import Nock.Proofs
+
+namespace Nock
 open Noun
 
 /-!
@@ -297,3 +299,5 @@ example (a fol : Noun) : NockEval a (cell (atom 12) fol) .exit :=
 example (a c : Noun) :
     NockEval a (cell (atom 7) (cell (cell (atom 0) (atom 0)) c)) .exit :=
   NockEval.op7_crash (NockEval.op0_crash (fasO_zero a))
+
+end Nock

@@ -2,6 +2,8 @@ import Nock.Basic
 import Nock.Proofs
 import Nock.Notation
 import Nock.HoonOne
+
+namespace Nock
 open Noun
 
 /-!
@@ -111,3 +113,5 @@ theorem decGate_eq : decGate = decGate' := by native_decide
 /-- The battery extracted from `decGate` equals the explicit `n!` literal
     `decBat` that `dec_correct` reasons about. -/
 theorem decBat_eq : fasO (atom 2) decGate = some decBat := by native_decide
+
+end Nock

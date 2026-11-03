@@ -6,6 +6,8 @@ import Nock.Comp
 import Nock.Term
 import Nock.CEval
 import Nock.Backward
+
+namespace Nock
 open Noun
 
 /-!
@@ -64,3 +66,5 @@ theorem composition_ofProg (p : Prog) (S : Noun) {o : Outcome}
     (h : NockEval S (N p) o) : o = Csem p S := by
   rw [← NT_ofProg] at h
   exact ceval_det (nockeval_complete h) (ceval_ofProg p S)
+
+end Nock

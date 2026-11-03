@@ -2,6 +2,8 @@ import Nock.Basic
 import Nock.Proofs
 import Nock.Eval
 import Nock.Notation
+
+namespace Nock
 open Noun
 
 /-!
@@ -469,3 +471,4 @@ theorem sub_correct (a b : Nat) (ctx : Noun) (hctx : SubCtx ctx) (hab : b ≤ a)
     NockEval (cell subBat (cell (cell (atom a) (atom b)) ctx)) subBat (.val (atom (a - b))) :=
   sub_loop_inv a b ctx hctx hab
 
+end Nock

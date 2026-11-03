@@ -7,6 +7,7 @@ lake build >/dev/null
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 {
   echo 'import Nock'
+  echo 'open Nock'
   grep -hoE '^#audit_clean .*' Nock/Audit.lean \
     | sed 's/^#audit_clean //' | tr ' ' '\n' | grep -v '^$' \
     | sed 's/^/#print axioms /'

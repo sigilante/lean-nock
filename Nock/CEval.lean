@@ -4,6 +4,8 @@ import Nock.Eval
 import Nock.Fuel
 import Nock.Comp
 import Nock.Term
+
+namespace Nock
 open Noun
 
 /-!
@@ -255,3 +257,5 @@ theorem ceval_sound_aux {t S o} (h : CEval t S o) :
     of the compiled term, with the same outcome. -/
 theorem ceval_sound {t S o} (h : CEval t S o) : NockEval S (NT t) o :=
   (ceval_sound_aux h).1
+
+end Nock

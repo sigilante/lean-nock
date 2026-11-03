@@ -6,6 +6,8 @@ import Nock.Term
 import Nock.CEval
 import Nock.Backward
 import Nock.Composition
+
+namespace Nock
 open Noun
 
 /-!
@@ -101,3 +103,5 @@ theorem composition_hint_diverges (t : Term) (tag c S : Noun) {r : Noun}
     (hc : NockEval S c (.val r)) :
     Diverges S (cell (atom 11) (cell (cell tag c) (NT t))) ↔ CDiverges t S :=
   (hint_dynamic_diverges tag c S (NT t) hc).trans (composition_diverges t S)
+
+end Nock

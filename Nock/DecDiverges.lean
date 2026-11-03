@@ -4,6 +4,8 @@ import Nock.Eval
 import Nock.Fuel
 import Nock.HoonOne
 import Nock.Notation
+
+namespace Nock
 open Noun
 
 /-!
@@ -322,3 +324,5 @@ theorem dec_cell_diverges (x y ctx : Noun) :
             have harm' : arm = decLoopBat := by simpa using harm.symm
             subst harm'
             exact dec_loop_cell_diverges 0 x y ctx o hloop
+
+end Nock

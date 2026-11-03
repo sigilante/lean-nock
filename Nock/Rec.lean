@@ -7,6 +7,8 @@ import Nock.Term
 import Nock.CEval
 import Nock.Backward
 import Nock.Composition
+
+namespace Nock
 open Noun
 
 /-!
@@ -894,3 +896,5 @@ theorem while_as_program (t b : Term) (S : Noun) (o : Outcome) :
       NockEval S (NT (.while t b .nil)) o :=
   (program_term _ _ S o).trans
     ((while_as_call t b [whileDef t b 0] 0 rfl S o).trans (composition_term _ S o).symm)
+
+end Nock

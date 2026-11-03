@@ -19,6 +19,12 @@ between them. See `README.md` for the claim-by-claim status table.
 - **Frozen names.** Manifest names are cited by the paper. Renaming or deleting
   one fails the build, which is deliberate. New cited theorems go into the
   manifest.
+- **One namespace.** Every module wraps its declarations in
+  `namespace Nock … end Nock`; nothing is re-exported to the root (that would
+  recreate the clash with lean-ski's root-level `Outcome` and `Diverges`).
+  Consumers write `open Nock`, as `Nock/Audit.lean`, `Main.lean` and
+  `scripts/print-axioms.sh` do; the manifest and the paper cite the names as
+  they read under `open Nock`.
 - **Quarantine direction.** `Nock/RuntimeBridge.lean` (`native_decide`) and
   `Nock/Oracle.lean` (fueled C oracle) may import the proof chain; nothing in
   the proof chain may import them. `scripts/gates.sh` enforces this.

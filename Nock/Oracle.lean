@@ -5,6 +5,8 @@ import Nock.Fuel
 import Nock.Comp
 import Nock.Term
 import Nock.Notation
+
+namespace Nock
 open Noun
 
 /-!
@@ -170,3 +172,5 @@ def sweep (nf cf : Nat) : Nat × Nat × Nat × Nat :=
 #eval sweep 4000 1500
 
 end Oracle
+
+end Nock

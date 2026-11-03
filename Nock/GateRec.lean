@@ -5,6 +5,8 @@ import Nock.Fuel
 import Nock.Shim
 import Nock.Gate
 import Nock.Rec
+
+namespace Nock
 open Noun
 
 /-!
@@ -102,3 +104,5 @@ theorem gate_program_fire (D : List RTerm) (m : RTerm) (sam ctx : Noun) (o : Out
       exact hbody
   · intro h
     exact NockEval.op9 (NockEval.op0 (fasO_one _)) (gate_program_battery D m sam ctx) h
+
+end Nock

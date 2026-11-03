@@ -93,6 +93,7 @@ elab "#audit_bridge " ids:ident+ : command => auditAgainst allowedBridge true id
 
 end Nock.Audit
 
+open Nock
 open Nock.Audit
 
 -- ---------------------------------------------------------------------------

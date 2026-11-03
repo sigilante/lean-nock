@@ -6,8 +6,9 @@ import Nock.Term
 import Nock.Gate
 import Nock.Rec
 import Nock.Oracle
+open Nock
 open Noun
-open Oracle (progs subjects)
+open Nock.Oracle (progs subjects)
 
 /-!
 # Differential corpus exporter

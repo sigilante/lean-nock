@@ -2,6 +2,8 @@ import Nock.Basic
 import Nock.Proofs
 import Nock.Eval
 import Nock.Comp
+
+namespace Nock
 open Noun
 
 /-!
@@ -104,3 +106,5 @@ theorem NT_ofProg (p : Prog) : NT (Term.ofProg p) = N p := by
   | cons w p ih =>
     show NT (.seq w (Term.ofProg p)) = N (w :: p)
     rw [NT_seq, ih]; rfl
+
+end Nock

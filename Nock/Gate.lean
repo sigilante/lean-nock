@@ -8,6 +8,8 @@ import Nock.Term
 import Nock.CEval
 import Nock.Backward
 import Nock.Composition
+
+namespace Nock
 open Noun
 
 /-!
@@ -165,3 +167,5 @@ theorem gate_call (t : Term) (sam ctx arg : Noun) {oS : Outcome}
           C [atom 10, C [atom 6, C [atom 1, arg]], C [atom 0, atom 1]]])
       (unloadOut oS) :=
   callGate_gate_eval (gateArm t) sam ctx arg (gate_sound (ctx := ctx) hc)
+
+end Nock

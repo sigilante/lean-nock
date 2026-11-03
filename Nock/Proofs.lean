@@ -1,4 +1,6 @@
 import Nock.Basic
+
+namespace Nock
 open Noun
 
 /-!
@@ -178,3 +180,5 @@ theorem haxO_six (b bat sam ctx : Noun) :
 
 -- nock (*) reduction rules live in Nock.Eval as the NockEval inductive relation.
 -- `partial def nock` is opaque to the kernel; use NockEval constructors for proofs.
+
+end Nock

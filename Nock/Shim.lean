@@ -5,6 +5,8 @@ import Nock.Fuel
 import Nock.HoonOne
 import Nock.DecDiverges
 import Nock.Comp
+
+namespace Nock
 open Noun
 
 /-!
@@ -143,3 +145,5 @@ theorem liftGate_decBat_cell_diverges (x y r ctx : Noun) :
 theorem liftGate_decBat_not_a_word (x y r ctx : Noun) :
     ¬ ∃ w : Word, phi w = liftGate decBat ctx :=
   not_denotable_of_diverges (liftGate_decBat_cell_diverges x y r ctx)
+
+end Nock

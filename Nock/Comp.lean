@@ -3,6 +3,8 @@ import Nock.Proofs
 import Nock.Eval
 import Nock.Fuel
 import Nock.Notation
+
+namespace Nock
 open Noun
 
 /-!
@@ -988,3 +990,4 @@ theorem not_denotable_of_diverges {f S : Noun} (hd : Diverges S f) :
   rintro ⟨w, rfl⟩
   exact word_crash_total w S hd
 
+end Nock

@@ -2,6 +2,8 @@ import Nock.Basic
 import Nock.Proofs
 import Nock.Eval
 import Nock.Fuel
+
+namespace Nock
 open Noun
 
 /-!
@@ -92,3 +94,5 @@ theorem order_op11_diverges {a t c d : Noun} (h : Diverges a c) :
 theorem order_op11_crashes {a t c d : Noun} (h : NockEval a c .exit) :
     NockEval a (cell (atom 11) (cell (cell t c) d)) .exit :=
   NockEval.op11_dyn_crash h
+
+end Nock

@@ -1,4 +1,7 @@
 -- Nock 4K
+
+namespace Nock
+
 inductive Noun
   | atom : Nat → Noun
   | cell : Noun → Noun → Noun
@@ -177,3 +180,5 @@ partial def nock : Noun → Noun → Noun
 end
 
 def op (k : Nat) (arg : Noun) : Noun := cell (atom k) arg
+
+end Nock
