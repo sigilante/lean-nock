@@ -192,6 +192,36 @@ theorem two_valued_unsound :
       cases h with
       | exit he => exact countUp_zero_diverges _ he⟩
 
+/-- **Two-valued implies three-valued for a jet that can only return or punt.**
+    `two_valued_unsound` shows the naïve contract fails in general — but it fails
+    only through the non-returning outcomes.  A jet that can only return a value
+    or punt (never `exit`, never `bail`) meets the three-valued contract as soon
+    as it meets the two-valued one: clause (a) *is* the two-valued contract, and
+    clauses (b)/(c) hold because a returning subject gives the formula a value,
+    so by determinism the formula neither crashes nor diverges there.  This is
+    exactly the shape of an `Option`-valued jet (`some`/`none` ↦ `val`/`punt`);
+    it is why such jets are safe without a separate crash-or-divergence analysis.
+
+    The hypothesis is tight on both outcomes it forbids.  `two_valued_unsound`'s
+    witness `natDec` escapes it by using `exit` (the jet exits where the formula
+    diverges, breaking the divergence clause).  A constant-`bail` jet on an
+    always-crashing formula escapes it the dual way: it bails where the formula
+    `exit`s, breaking clause (b).  So "val-or-punt", not merely "never exits", is
+    the honest hypothesis.  This is a different class from the Λ words, which are
+    val-or-exit and handled directly by `word_jet_sound`. -/
+theorem threeValued_of_twoValued_valOrPunt {F : Noun} {j : Noun → JetOut}
+    (h2 : TwoValued F j) (hvp : ∀ S, (∃ v, j S = .val v) ∨ j S = .punt) :
+    ThreeValued F j := by
+  intro S hpunt
+  obtain ⟨v, hv⟩ | hp := hvp S
+  · have hval : NockEval S F (.val v) := (h2 S v).2 hv
+    refine ⟨h2 S, ?_, ?_⟩
+    · constructor
+      · intro hexit; cases NockEval.deterministic hexit hval
+      · intro hjexit; rw [hv] at hjexit; cases hjexit
+    · intro hdiv; exact absurd hval (hdiv (.val v))
+  · exact absurd hp hpunt
+
 -- ---------------------------------------------------------------------------
 -- Λ words meet the three-valued contract
 -- ---------------------------------------------------------------------------

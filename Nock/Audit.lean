@@ -169,7 +169,7 @@ open Nock.Audit
 -- `+mock`: the two-valued contract is unsound, the three-valued one sound
 #audit_clean three_valued_sound three_valued_mock
 #audit_clean natDec_twoValued natDec_not_threeValued two_valued_unsound
-#audit_clean word_jet_sound
+#audit_clean word_jet_sound threeValued_of_twoValued_valOrPunt
 
 -- Evaluation order, pinned to Vere and NockVM (opcode 10: tree before patch)
 #audit_clean order_autocons_diverges order_autocons_crashes
