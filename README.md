@@ -1,5 +1,7 @@
 # lean-nock ❖ Jet correctness for Nock, in Lean 4
 
+[![DOI](https://zenodo.org/badge/1178059614.svg)](https://doi.org/10.5281/zenodo.24294230)
+
 A Lean 4 mechanization of **jet correctness** for the Nock 4K combinator
 calculus: the companion artifact to *Jet-Accelerated Code and the Co-Design
 Problem* (N. E. Davis, *Urbit Systems Technical Journal*).
