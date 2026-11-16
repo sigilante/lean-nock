@@ -1,0 +1,30 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "lean-nock: Jet correctness for Nock, in Lean 4"
+abstract: >-
+  A Lean 4 mechanization of jet correctness for the Nock 4K combinator
+  calculus; the companion artifact to "Jet-Accelerated Code and the
+  Co-Design Problem" (N. E. Davis, Urbit Systems Technical Journal). It
+  states the three-valued jet contract, proves the two-valued contract
+  unsound under virtualization, and develops co-derivation of a Nock
+  formula and its native jet from a common concatenative source. Axiom
+  footprint {propext, Quot.sound}, build-gated; no Mathlib dependency.
+type: software
+authors:
+  - family-names: Davis
+    given-names: N. E.
+    affiliation: ZeroAttest
+license: MIT
+repository-code: "https://github.com/sigilante/lean-nock"
+keywords:
+  - Nock
+  - Urbit
+  - jets
+  - Lean 4
+  - formal verification
+  - co-derivation
+  - combinator calculus
+# At release, fill in and uncomment:
+# version: "1.0.0"
+# date-released: "2026-11-17"
+# doi: "10.5281/zenodo.XXXXXXX"

@@ -1,0 +1,20 @@
+{
+  "upload_type": "software",
+  "title": "lean-nock: Jet correctness for Nock, in Lean 4",
+  "description": "A Lean 4 mechanization of jet correctness for the Nock 4K combinator calculus: the companion artifact to \"Jet-Accelerated Code and the Co-Design Problem\" (N. E. Davis, Urbit Systems Technical Journal). It states the three-valued jet contract, proves the naive two-valued contract unsound under virtualization (++mock), and develops co-derivation of a Nock formula and its native jet from a common concatenative source via a composition theorem, with extensions to conditionals, loops, named definitions, and gate dispatch. The Class A and B leaf contracts and the full Class C arithmetic (dec, add, sub, lt, mul, div, mod) are discharged against a reference semantics. An audit manifest elaborated at build time fails the build if any cited theorem's axiom footprint exceeds {propext, Quot.sound} or if any sorry is present; there is no Mathlib dependency.",
+  "license": "MIT",
+  "access_right": "open",
+  "creators": [
+    { "name": "Davis, N. E.", "affiliation": "ZeroAttest" }
+  ],
+  "keywords": [
+    "Nock",
+    "Urbit",
+    "jets",
+    "Lean 4",
+    "formal verification",
+    "interactive theorem proving",
+    "co-derivation",
+    "combinator calculus"
+  ]
+}
