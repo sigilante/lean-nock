@@ -62,7 +62,7 @@ definitionally only in this order.
 inductive Word
   | dup | drop | swap | over | cons | head | tail   -- Class A
   | inc | eq | celq                                 -- Class B  (celq = cel?)
-  | dec | add | sub                                 -- Class C
+  | dec | add | sub | mul                           -- Class C
   deriving DecidableEq, Repr
 
 -- ---------------------------------------------------------------------------
@@ -180,6 +180,39 @@ def wSubLoop : Noun :=
 
 def subGuarded : Noun := guardPair wSubLoop
 
+/-- The `mul` loop's core rebuild: `[bat [c+1 [add(acc,a) [a b]]]]` — bump the
+    counter, add `a` to the accumulator through the guarded `add` (a nested
+    loop), and carry `a`, `b` unchanged.
+    `[[0 2] [4 0 6] [7 [[0 14] 0 30] <guarded-add>] [0 30] 0 31]` -/
+def wMulRebuild : Noun :=
+  cell (n! "[0 2]")
+    (cell (n! "[4 0 6]")
+      (cell (cell (atom 7) (cell (n! "[[0 14] 0 30]") addGuarded))
+        (cell (n! "[0 30]") (n! "[0 31]"))))
+
+/-- The `mul` loop battery.  Core `[bat [c [acc [a b]]]]`: axis 6 = counter,
+    14 = accumulator, 30 = multiplicand `a`, 31 = bound `b`.  Return `acc` when
+    `c = b`, else add `a` to `acc`, bump `c`, and fire again.
+
+      [6 [5 [0 6] 0 31] [0 14] [9 2 wMulRebuild]] -/
+def wMulBat : Noun :=
+  cell (atom 6) (cell (n! "[5 [0 6] 0 31]")
+    (cell (n! "[0 14]") (cell (atom 9) (cell (atom 2) wMulRebuild))))
+
+/-- The loop core `[wMulBat [c [acc [a b]]]]`. -/
+def wMulCore (c acc a b : Nat) : Noun :=
+  cell wMulBat (cell (atom c) (cell (atom acc) (cell (atom a) (atom b))))
+
+/-- On a pair `[a b]`: push accumulator 0, counter 0, the battery, fire.
+
+      [8 [1 0] 8 [1 0] 8 [1 wMulBat] 9 2 0 1] -/
+def wMulLoop : Noun :=
+  cell (atom 8) (cell (n! "[1 0]")
+    (cell (atom 8) (cell (n! "[1 0]")
+      (cell (atom 8) (cell (cell (atom 1) wMulBat) (n! "[9 2 0 1]"))))))
+
+def mulGuarded : Noun := guardPair wMulLoop
+
 /-- Nock formulas, transcribed verbatim from the paper's Tables A and B. -/
 def phi : Word → Noun
   | .dup  => cell (cell (atom 0) (atom 2)) (cell (atom 0) (atom 1))
@@ -214,6 +247,8 @@ def phi : Word → Noun
       -- [[7 [[0 6] 0 2] <guarded-inc-loop>] 0 7]   ( a b — a+b )
   | .sub  => liftBinary subGuarded
       -- [[7 [[0 6] 0 2] <guarded-dec-loop>] 0 7]   ( a b — a-b )
+  | .mul  => liftBinary mulGuarded
+      -- [[7 [[0 6] 0 2] <guarded-add-loop>] 0 7]   ( a b — a*b )
 
 /-- The shallow C model.  Total over **all** nouns; the `.exit` cases are the
     ⊥-domain column of the paper's tables, stated over arbitrary nouns rather
@@ -263,6 +298,11 @@ def cw : Word → Noun → Outcome
   | .sub,  cell (atom _) (cell (cell _ _) _) => .exit  -- a is a cell
   | .sub,  cell (atom b) (cell (atom a) r) =>
       if b ≤ a then .val (cell (atom (a - b)) r) else .exit   -- b > a crashes
+  | .mul,  atom _                          => .exit    -- depth < 2
+  | .mul,  cell _ (atom _)                 => .exit    -- depth < 2
+  | .mul,  cell (cell _ _) (cell _ _)      => .exit    -- b is a cell
+  | .mul,  cell (atom _) (cell (cell _ _) _) => .exit  -- a is a cell
+  | .mul,  cell (atom b) (cell (atom a) r) => .val (cell (atom (a * b)) r)
 
 -- ---------------------------------------------------------------------------
 -- Leaf contracts: one per word.  Each is a *single* statement carrying the
@@ -889,6 +929,99 @@ private theorem leaf_sub (S : Noun) : NockEval S (phi .sub) (cw .sub S) := by
           · rw [if_pos hge] at h ⊢
             exact liftBinary_val h
 
+-- `mul`: the add-loop, over the guarded `add`
+
+private theorem wMul_slot14 (c acc a b : Nat) :
+    fasO (atom 14) (wMulCore c acc a b) = some (atom acc) := by simp [wMulCore, fasO]
+
+private theorem wMul_slot30 (c acc a b : Nat) :
+    fasO (atom 30) (wMulCore c acc a b) = some (atom a) := by simp [wMulCore, fasO]
+
+private theorem wMul_slot31 (c acc a b : Nat) :
+    fasO (atom 31) (wMulCore c acc a b) = some (atom b) := by simp [wMulCore, fasO]
+
+private theorem wMulBat_parts :
+    wMulBat = cell (atom 6) (cell (n! "[5 [0 6] 0 31]") (cell (n! "[0 14]")
+      (cell (atom 9) (cell (atom 2) wMulRebuild)))) := rfl
+
+/-- One loop step: bump the counter, add `a` to the accumulator (via the guarded
+    `add`), and carry `a`, `b`. -/
+private theorem wMul_rebuild (c acc a b : Nat) :
+    NockEval (wMulCore c acc a b) wMulRebuild
+      (.val (wMulCore (c + 1) (acc + a) a b)) := by
+  have h : NockEval (wMulCore c acc a b) wMulRebuild
+      (.val (cell wMulBat (cell (atom (1 + c))
+        (cell (atom (acc + a)) (cell (atom a) (atom b)))))) :=
+    NockEval.autocons (NockEval.op0 (fasO_head _ _))
+      (NockEval.autocons
+        (NockEval.op4 (NockEval.op0 (fasO_six _ _ _)) (lusO_atom c))
+        (NockEval.autocons
+          (NockEval.op7
+            (NockEval.autocons (NockEval.op0 (wMul_slot14 c acc a b))
+              (NockEval.op0 (wMul_slot30 c acc a b)))
+            (addGuarded_atoms acc a))
+          (NockEval.autocons
+            (NockEval.op0 (wMul_slot30 c acc a b))
+            (NockEval.op0 (wMul_slot31 c acc a b)))))
+  simpa [wMulCore, Nat.add_comm] using h
+
+/-- Loop invariant: with `d` iterations to go, the loop adds `a` to the
+    accumulator `d` times. -/
+private theorem wMul_loop (d : Nat) : ∀ c acc a b : Nat, b = c + d →
+    NockEval (wMulCore c acc a b) wMulBat (.val (atom (acc + a * d))) := by
+  induction d with
+  | zero =>
+    intro c acc a b hb
+    simp only [Nat.add_zero] at hb
+    simp only [Nat.mul_zero, Nat.add_zero]
+    rw [hb, wMulBat_parts]
+    have hcond : NockEval (wMulCore c acc a c) (n! "[5 [0 6] 0 31]") (.val (atom 0)) := by
+      have h := NockEval.op5 (NockEval.op0 (fasO_six wMulBat (atom c)
+          (cell (atom acc) (cell (atom a) (atom c)))))
+        (NockEval.op0 (wMul_slot31 c acc a c))
+      rwa [tisN_refl] at h
+    exact NockEval.op6_then hcond (NockEval.op0 (wMul_slot14 c acc a c))
+  | succ d ih =>
+    intro c acc a b hb
+    rw [wMulBat_parts]
+    have hcond : NockEval (wMulCore c acc a b) (n! "[5 [0 6] 0 31]") (.val (atom 1)) := by
+      have h := NockEval.op5 (NockEval.op0 (fasO_six wMulBat (atom c)
+          (cell (atom acc) (cell (atom a) (atom b)))))
+        (NockEval.op0 (wMul_slot31 c acc a b))
+      rwa [tisN_neq _ _ (fun hc => by injection hc with hc; omega)] at h
+    refine NockEval.op6_else hcond ?_
+    refine NockEval.op9 (wMul_rebuild c acc a b) (fasO_head _ _) ?_
+    have := ih (c + 1) (acc + a) a b (by omega)
+    rwa [show acc + a + a * d = acc + a * (d + 1) from by rw [Nat.mul_succ]; omega] at this
+
+/-- The guarded add-loop computes `a * b` on a pair of atoms. -/
+private theorem mulGuarded_atoms (a b : Nat) :
+    NockEval (cell (atom a) (atom b)) mulGuarded (.val (atom (a * b))) := by
+  refine guardPair_pass ?_
+  refine NockEval.op8 NockEval.op1 (NockEval.op8 NockEval.op1 (NockEval.op8 NockEval.op1 ?_))
+  show NockEval (wMulCore 0 0 a b)
+    (cell (atom 9) (cell (atom 2) (cell (atom 0) (atom 1)))) (.val (atom (a * b)))
+  have hl := wMul_loop b 0 0 a b (by omega)
+  simpa [wMulCore] using NockEval.op9 (NockEval.op0 (fasO_one _)) (fasO_head _ _) hl
+
+/-- **Table C's `mul` row, discharged by the kernel.** -/
+private theorem leaf_mul (S : Noun) : NockEval S (phi .mul) (cw .mul S) := by
+  cases S with
+  | atom n => exact liftBinary_atom _ n
+  | cell b t =>
+    cases t with
+    | atom m => exact liftBinary_shallow _ b m
+    | cell a r =>
+      cases b with
+      | cell bx byy =>
+        cases a with
+        | cell x y => exact liftBinary_exit (guardPair_cellL x y _ _)
+        | atom m   => exact liftBinary_exit (guardPair_cellR m bx byy _)
+      | atom nb =>
+        cases a with
+        | cell x y => exact liftBinary_exit (guardPair_cellL x y _ _)
+        | atom na  => exact liftBinary_val (mulGuarded_atoms na nb)
+
 /-- **Leaf correctness.**  For every word and every subject noun, the compiled
     Nock formula evaluates to exactly the outcome the C model specifies —
     value where the model returns, crash where the model crashes. -/
@@ -907,6 +1040,7 @@ theorem leaf_correct (w : Word) (S : Noun) : NockEval S (phi w) (cw w S) := by
   · exact leaf_dec S
   · exact leaf_add S
   · exact leaf_sub S
+  · exact leaf_mul S
 
 -- ---------------------------------------------------------------------------
 -- The two compilers and the composition theorem
